@@ -4,6 +4,6 @@
 #ifndef MEX_MODEL
 #define MEX_MODEL
 
-Observation_model *assign_model(const mxArray *prhs);
+Observation_model *assignModel(const mxArray *prhs);
 
 #endif

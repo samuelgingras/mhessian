@@ -7,10 +7,12 @@
 
 
 // Default computation options
-static double tolerance = 0.0001;
-static int max_iterations = 100;
-static int n_alpha_partials = 4;
+#define TOLREANCE       0.0001
+#define MAX_ITERATIONS     100
+#define N_ALPHA_PARTIALS     4
 
+#define TRUE    1
+#define FALSE   0
 
 static double *readStateParameter(int n, const mxArray *prhs)
 {
@@ -31,7 +33,7 @@ static double *readStateParameter(int n, const mxArray *prhs)
     return x_tm;
 }
 
-void initializeStateParameter(const mxArray *prhs, State_parameter *theta_alpha)
+void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
 {
     // Set pointer to each field
     mxArray *pr_N = mxGetField(prhs,0,"N");
@@ -46,9 +48,9 @@ void initializeStateParameter(const mxArray *prhs, State_parameter *theta_alpha)
     ErrMsgTxt( pr_d != NULL || pr_mu != NULL,
     "Invalid input argument: mean/intercept parameter expected");
     ErrMsgTxt( pr_phi != NULL,
-    "Invalid input argument: persitence parameter expected");
+    "Invalid input argument: persistence parameter expected");
     ErrMsgTxt( pr_omega != NULL,
-    "Inbalid input argument: precision parameter expected");
+    "Invalid input argument: precision parameter expected");
     
     // Read number of observation
     ErrMsgTxt( mxIsScalar(pr_N),
@@ -93,16 +95,6 @@ void initializeStateParameter(const mxArray *prhs, State_parameter *theta_alpha)
     }
 }
 
-void setDefaultOptions(State *state)
-{
-    state->guess_alC = 0;
-    state->sign = 1;
-    state->tolerance = tolerance;
-    state->max_iterations = max_iterations;
-    state->max_iterations_safe = 5 * max_iterations;
-    state->max_iterations_unsafe = max_iterations;
-    state->n_alpha_partials = n_alpha_partials;
-}
 
 void readComputationOptions(const mxArray *prhs, State *state)
 {
@@ -143,6 +135,36 @@ void readComputationOptions(const mxArray *prhs, State *state)
         mxCheckVectorSize(state->n, pr_alc);
         memcpy(state->alC, mxGetPr(pr_alc), state->n * sizeof(double));
     }
+}
+
+State *stateAlloc( void )
+{
+    State *state = (State *) mxMalloc( sizeof(State) );
+
+    // Set default computation options
+    state->guess_alC = FALSE;
+    state->sign = TRUE;
+    state->tolerance = TOLREANCE;
+    state->max_iterations = MAX_ITERATIONS;
+    state->max_iterations_safe = 5 * MAX_ITERATIONS;
+    state->max_iterations_unsafe = MAX_ITERATIONS;
+    state->n_alpha_partials = N_ALPHA_PARTIALS;
+
+    return state;
+}
+
+Theta *thetaAlloc( void )
+{
+    Theta *theta = (Theta *) mxMalloc( sizeof(Theta) );
+    theta->y = (Parameter *) mxMalloc( sizeof(Parameter) );
+    theta->alpha = (State_parameter *) mxMalloc( sizeof(State_parameter) );
+    return theta;
+}
+
+Data *dataAlloc( void )
+{
+    Data *data = (Data *) mxMalloc( sizeof(Data) );
+    return data;
 }
 
 mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
@@ -191,7 +213,8 @@ mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
     state->psi_stride = (model->n_partials_t+1) * (model->n_partials_tp1+1);
     
     // Read field names
-    int i, nfield = sizeof(field)/sizeof(Field);
+    int i;
+    int nfield = sizeof(field)/sizeof(Field);
     const char *field_names[nfield];
     for(i=0; i<nfield; i++)
         field_names[i] = field[i].Matlab_field_name;
@@ -209,12 +232,4 @@ mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
     *(field[i].C_field_pointer) = mxGetPr(field_pr);
     
     return mxState;
-}
-
-Theta *mxThetaAlloc( void )
-{
-    Theta *theta = (Theta *) mxMalloc( sizeof(Theta) );
-    theta->y = (Parameter *) mxMalloc( sizeof(Parameter) );
-    theta->alpha = (State_parameter *) mxMalloc( sizeof(State_parameter) );
-    return theta;
 }

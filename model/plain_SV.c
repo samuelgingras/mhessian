@@ -5,34 +5,74 @@
 #include "state.h"
 #include "errors.h"
 
-
 static int n_theta = 0;
 static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
-
 
 static char *usage_string = 
 "Name: plain_SV\n"
 "Description: Univariate Gaussian stochastic volatility model, without leverage\n"
 "Extra parameters: none\n";
 
-static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
+static void initializeTheta(const mxArray *prhs, Theta *theta)
 {
-    theta_y->n = n_theta;
+
+    // Check if structure input
+    if( !mxIsStruct(prhs) )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Structure input required.");
+
+    // Check if nested structure
+    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
+
+    if( pr_theta_x != NULL )
+        initializeThetaAlpha( pr_theta_x, theta->alpha );
+    else
+        initializeThetaAlpha( prhs, theta->alpha );
+
 }
 
-static void read_data(const mxArray *prhs, Data *data)
+static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
-    mxArray *pr_y = mxGetField(prhs,0,"y");
-    
-    ErrMsgTxt( pr_y != NULL,
-    "Invalid input argument: data struct: 'y' field missing");
-    ErrMsgTxt( mxGetN(pr_y),
-    "Invalid input argument: data struct: column vector expected");
-    
-    data->n = mxGetM(pr_y);
-    data->m = mxGetM(pr_y);
-    data->y = mxGetPr(pr_y);
+    // No model parameter to initialize
+}
+
+static void initializeData(const mxArray *prhs, Data *data)
+{
+    if( mxIsStruct(prhs) )
+    {
+        mxArray *pr_y = mxGetField( prhs, 0, "y" );
+
+        if( pr_y == NULL )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
+                "Structure input: Field 'y' required.");
+
+        if( !mxIsDouble(pr_y) )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Vector of double required.");
+
+        if( mxGetN(pr_y) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector required.");
+
+        data->n = mxGetM(pr_y);
+        data->m = mxGetM(pr_y);
+        data->y = mxGetDoubles(pr_y);
+    }
+    else
+    {
+        if( !mxIsDouble(prhs) )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Vector of double required.");
+
+        if( mxGetN(prhs) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector required.");
+
+        data->n = mxGetM(prhs);
+        data->m = mxGetM(prhs);
+        data->y = mxGetDoubles(prhs);
+    }
 }
 
 static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
@@ -76,20 +116,22 @@ static void compute_derivatives( Theta *theta, State *state, Data *data )
         derivative(data->y[t], alpha[t], psi_t);
 }
 
-static void initialize(void);
+static void initializeModel(void);
 
-Observation_model plain_SV = { initialize, 0 };
+Observation_model plain_SV = { initializeModel, 0 };
 
-static void initialize()
+static void initializeModel()
 {
+    plain_SV.n_theta = n_theta;
     plain_SV.n_partials_t = n_partials_t;
     plain_SV.n_partials_tp1 = n_partials_tp1;
     
     plain_SV.usage_string = usage_string;
-    
+
+    plain_SV.initializeData = initializeData;    
+    plain_SV.initializeTheta = initializeTheta;
     plain_SV.initializeParameter = initializeParameter;
-    plain_SV.read_data = read_data;
-    
+
     plain_SV.draw_y__theta_alpha = draw_y__theta_alpha;
     plain_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;
     

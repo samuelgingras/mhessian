@@ -23,18 +23,8 @@ void mxCheckVector(const mxArray *prhs)
         "Invalid input argument: column vector expected");
 }
 
-// void mxCheckScalar(const mxArray *prhs)
-// {
-//
-// }
-
 void mxCheckVectorSize(int n, const mxArray *prhs)
 {
     ErrMsgTxt( mxGetM(prhs) == n,
         "Invalid input argument: incompatible vector length");
 }
-
-// void mxCheckVectorCompatibility(const mxArray *prhs1, const mxArray *prhs2)
-// {
-//
-// }
