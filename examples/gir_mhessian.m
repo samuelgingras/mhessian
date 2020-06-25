@@ -1,4 +1,9 @@
-%Simulation parameters
+% File: gir_mhessian.m
+% 
+% Date: 2020-06-24
+% Author: Samuel Gingras
+
+% Simulation parameters
 M = 10^3;           % Nb of simulated block
 B = 100;            % Nb of draw by block
 N = 25;             % Nb of artificial observation
@@ -46,14 +51,14 @@ lnp_y__x = hmout.lnp_y__x;
 lnq_x__y = hmout.lnq_x__y;
 
 % Simulate counts of fixed block sizes 
-for m=1:nbdraw
+for m=1:M
 
     % New block: set counts at zeros
     count1 = zeros(N,9);
     count2 = zeros(N-1,9);
 
     % Simulate counts for block b
-    for b=1:nbblock
+    for b=1:B
         
         % (a) Draw proposal xSt|y
         hmout = hessianMethod( model, y, theta, 'GuessMode', x0 );
@@ -102,4 +107,3 @@ for m=1:nbdraw
     postsim.count2(m,:) = mean( count2 ./ nbblock, 1 );
 
 end
-
