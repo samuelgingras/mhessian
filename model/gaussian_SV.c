@@ -10,13 +10,19 @@ static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
 
 static char *usage_string = 
-"Name: plain_SV\n"
-"Description: Univariate Gaussian stochastic volatility model, without leverage\n"
+"Name: gaussian_SV\n"
+"Description: Stochastic volatility model, without leverage, with Gaussian distribution\n"
 "Extra parameters: none\n";
 
-static void initializeTheta(const mxArray *prhs, Theta *theta)
+static
+void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
+    // No model parameter to initialize
+}
 
+static
+void initializeTheta(const mxArray *prhs, Theta *theta)
+{
     // Check if structure input
     if( !mxIsStruct(prhs) )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
@@ -29,15 +35,10 @@ static void initializeTheta(const mxArray *prhs, Theta *theta)
         initializeThetaAlpha( pr_theta_x, theta->alpha );
     else
         initializeThetaAlpha( prhs, theta->alpha );
-
 }
 
-static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // No model parameter to initialize
-}
-
-static void initializeData(const mxArray *prhs, Data *data)
+static
+void initializeData(const mxArray *prhs, Data *data)
 {
     if( mxIsStruct(prhs) )
     {
@@ -61,13 +62,9 @@ static void initializeData(const mxArray *prhs, Data *data)
     }
     else
     {
-        if( !mxIsDouble(prhs) )
+        if( !mxIsDouble(prhs) && mxGetN(prhs) != 1 )
             mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Vector of double required.");
-
-        if( mxGetN(prhs) != 1 )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Column vector required.");
+                "Column vector of double required.");
 
         data->n = mxGetM(prhs);
         data->m = mxGetM(prhs);
@@ -75,14 +72,16 @@ static void initializeData(const mxArray *prhs, Data *data)
     }
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static
+void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 {
     int t, n = data->n;
     for (t=0; t<n; t++)
         data->y[t] = exp(alpha[t]/2) * rng_gaussian();
 }
 
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static
+void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int t, n = data->n;
     double result = 0.0;
@@ -95,19 +94,22 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
     *log_f = 0.5 * result;
 }
 
-static inline void derivative(double y_t, double alpha_t, double *psi_t)
+static inline
+void derivative(double y_t, double alpha_t, double *psi_t)
 {
     psi_t[4] = psi_t[2] = -0.5 * (y_t * y_t) * exp( -alpha_t );
     psi_t[1] = -psi_t[2] - 0.5;
     psi_t[5] = psi_t[3] = -psi_t[2];
 }
 
-static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t) 
+static
+void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t) 
 {
     derivative(data->y[t], alpha, psi_t);
 }
 
-static void compute_derivatives( Theta *theta, State *state, Data *data )
+static
+void compute_derivatives( Theta *theta, State *state, Data *data )
 {
     int t, n = state->n;
     double *alpha = state->alC; 
@@ -116,25 +118,27 @@ static void compute_derivatives( Theta *theta, State *state, Data *data )
         derivative(data->y[t], alpha[t], psi_t);
 }
 
-static void initializeModel(void);
+static
+void initializeModel(void);
 
-Observation_model plain_SV = { initializeModel, 0 };
+Observation_model gaussian_SV = { initializeModel, 0 };
 
-static void initializeModel()
+static
+void initializeModel()
 {
-    plain_SV.n_theta = n_theta;
-    plain_SV.n_partials_t = n_partials_t;
-    plain_SV.n_partials_tp1 = n_partials_tp1;
+    gaussian_SV.n_theta = n_theta;
+    gaussian_SV.n_partials_t = n_partials_t;
+    gaussian_SV.n_partials_tp1 = n_partials_tp1;
     
-    plain_SV.usage_string = usage_string;
+    gaussian_SV.usage_string = usage_string;
 
-    plain_SV.initializeData = initializeData;    
-    plain_SV.initializeTheta = initializeTheta;
-    plain_SV.initializeParameter = initializeParameter;
+    gaussian_SV.initializeData = initializeData;
+    gaussian_SV.initializeTheta = initializeTheta;
+    gaussian_SV.initializeParameter = initializeParameter;
 
-    plain_SV.draw_y__theta_alpha = draw_y__theta_alpha;
-    plain_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    gaussian_SV.draw_y__theta_alpha = draw_y__theta_alpha;
+    gaussian_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;
     
-    plain_SV.compute_derivatives_t = compute_derivatives_t;
-    plain_SV.compute_derivatives = compute_derivatives;
+    gaussian_SV.compute_derivatives_t = compute_derivatives_t;
+    gaussian_SV.compute_derivatives = compute_derivatives;
 }

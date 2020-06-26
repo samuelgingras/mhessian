@@ -5,22 +5,18 @@
 #include "state.h"
 #include "errors.h"
 
-// Initial observation model
-extern Observation_model plain_SV;
-// extern Observation_model student_SV;
-// extern Observation_model Poisson_SS;
-// extern Observation_model gammaPoisson_SS;
-// extern Observation_model exp_SS;
-
-// // Additional observation model
-// extern Observation_model mixture_SV;
-extern Observation_model student_sd_SV;
-// extern Observation_model exp_SCD;
-// extern Observation_model weibull_SS;
-// extern Observation_model gamma_SS;
-// extern Observation_model gen_gamma_SS;
-// extern Observation_model regime_mix_exp_SS_cont;
-// extern Observation_model regime_mix_exp_SS_disc;
+extern Observation_model gaussian_SV;
+extern Observation_model mix_gaussian_SV;
+extern Observation_model student_SV;
+extern Observation_model poisson_SS;
+extern Observation_model gammapoisson_SS;
+extern Observation_model exp_SS;
+extern Observation_model mix_exp_SS;
+extern Observation_model gamma_SS;
+extern Observation_model weibull_SS;
+extern Observation_model gengamma_SS;
+extern Observation_model regime_mix_exp_SS;
+extern Observation_model regime_mix_exp_SS_tobs;
 
 Observation_model *assignModel(const mxArray *prhs)
 {
@@ -33,13 +29,13 @@ Observation_model *assignModel(const mxArray *prhs)
         if( tmp != NULL && mxIsChar(tmp) )
             name = mxArrayToString( tmp );
         else
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
-                "Field 'name' required." );
+            mexErrMsgIdAndTxt( "mhessian:missingInputs",
+                "Model: Field 'name' required." );
     }
     else if( mxIsChar(prhs) )
         name = mxArrayToString( prhs );
     else
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
+        mexErrMsgIdAndTxt( "mhessian:missingInputs",
             "Model name required.");
 
     if( name == NULL )
@@ -47,61 +43,58 @@ Observation_model *assignModel(const mxArray *prhs)
             "Error reading model name." );
 
 
-    if( !strcmp(name, "plain_SV") )
+    if( !strcmp(name, "gaussian_SV") )
     {
-        model = &plain_SV;
+        model = &gaussian_SV;
     }
-    // else if( !strcmp(name, "mixture_SV") )
-    // {
-    //     model = &mixture_SV;
-    // }
-    // else if( !strcmp(name, "student_SV") )
-    // {
-    //     model = &student_SV;
-    // }
-    else if( !strcmp(name, "student_sd_SV") )
+    else if( !strcmp(name, "mix_gaussian_SV") )
     {
-        model = &student_sd_SV;
+        model = &mix_gaussian_SV;
     }
-    // else if( !strcmp(name, "Poisson_SS") )
-    // {
-    //     model = &Poisson_SS;
-    // }
-    // else if( !strcmp(name, "gammaPoisson_SS") )
-    // {
-    //     model = &gammaPoisson_SS;
-    // }
-    // else if( !strcmp(name, "exp_SS") )
-    // {
-    //     model = &exp_SS;
-    // }
-    // else if( !strcmp(name, "exp_SCD") )
-    // {
-    //     model = &exp_SCD;
-    // }
-    // else if( !strcmp(name, "gen_gamma_SS") )
-    // {
-    //     model = &gen_gamma_SS;
-    // }
-    // else if( !strcmp(name, "gamma_SS") )
-    // {
-    //     model = &gamma_SS;
-    // }
-    // else if( !strcmp(name, "weibull_SS") )
-    // {
-    //     model = &weibull_SS;
-    // }
-    // else if( !strcmp(name, "regime_mix_exp_SS_cont") )
-    // {
-    //     model = &regime_mix_exp_SS_cont;
-    // }
-    // else if( !strcmp(name, "regime_mix_exp_SS_disc") )
-    // {
-    //     model = &regime_mix_exp_SS_disc;
-    // }
+    else if( !strcmp(name, "student_SV") )
+    {
+        model = &student_SV;
+    }
+    else if( !strcmp(name, "poisson_SS") )
+    {
+        model = &poisson_SS;
+    }
+    else if( !strcmp(name, "gammapoisson_SS") )
+    {
+        model = &gammapoisson_SS;
+    }
+    else if( !strcmp(name, "exp_SS") )
+    {
+        model = &exp_SS;
+    }
+    else if( !strcmp(name, "mix_exp_SS") )
+    {
+        model = &mix_exp_SS;
+    }
+        else if( !strcmp(name, "gamma_SS") )
+    {
+        model = &gamma_SS;
+    }
+    else if( !strcmp(name, "weibull_SS") )
+    {
+        model = &weibull_SS;
+    }
+    else if( !strcmp(name, "gengamma_SS") )
+    {
+        model = &gengamma_SS;
+    }
+    else if( !strcmp(name, "regime_mix_exp_SS") )
+    {
+        model = &regime_mix_exp_SS;
+    }
+    else if( !strcmp(name, "regime_mix_exp_SS_tobs") )
+    {
+        model = &regime_mix_exp_SS_tobs;
+    }
     else
     {
-        mexErrMsgTxt("Unavailable model \n");
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Observation model not available.");
     }
     
     mxFree(name);

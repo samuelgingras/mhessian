@@ -13,52 +13,104 @@ static int n_partials_tp1 = 0;
 
 static char *usage_string =
 "Name: student_SV\n"
-"Description: Univariate Student's t stochastic volatility model, without leverage\n"
+"Description: Stochastic volatility model, without leverage, with Student's t distribution\n"
 "Extra parameters:\n"
 "\tnu\tStudent's t degree of freedom, positive real scalar\n";
 
-static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
+static
+void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
-    theta_y->n = n_theta;
-    mxArray *pr_nu = mxGetField(prhs,0,"nu");
-    
-    ErrMsgTxt( pr_nu != NULL,
-        "Invalid input argument: model parameter expected");
-    ErrMsgTxt( mxIsScalar(pr_nu),
-        "Invalid input argument: scalar parameter expected");
-    ErrMsgTxt( mxGetScalar(pr_nu) > 0,
-        "Invalid input argument: positive parameter expected");
-    
-    theta_y->scalar = (double *) mxMalloc( sizeof(double) );
-    theta_y->scalar[0] = mxGetScalar(pr_nu);
+    // Set pointer to field
+    mxArray *pr_nu = mxGetField( prhs, 0, "nu" );
+
+    // Check for missing parameter
+    if( pr_nu == NULL )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Structure input: Field 'nu' required.");
+
+    // Check parameter
+    if( !mxIsScalar(pr_nu)  )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Model parameter: Scalar parameter required.");
+
+    if( mxGetScalar(pr_nu) < 0.0 )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Model parameter: Positive parameter required.");
+
+    // Read model parameter
+    theta_y->nu = mxGetScalar(pr_nu);
 }
 
-static void read_data(const mxArray *prhs, Data *data)
+static
+void initializeTheta(const mxArray *prhs, Theta *theta)
 {
-    mxArray *pr_y = mxGetField(prhs,0,"y");
-    
-    ErrMsgTxt( pr_y != NULL,
-    "Invalid input argument: data struct: 'y' field missing");
-    ErrMsgTxt( mxGetN(pr_y),
-    "Invalid input argument: data struct: column vector expected");
-    
-    data->n = mxGetM(pr_y);
-    data->m = mxGetM(pr_y);
-    data->y = mxGetPr(pr_y);
+    // Check structure input
+    if( !mxIsStruct(prhs) )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Structure input required.");
+
+    // Check nested structure
+    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
+    mxArray *pr_theta_y = mxGetField( prhs, 0, "y" );
+
+    if( pr_theta_x == NULL )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Nested structure input: Field 'x' required.");
+
+    if( pr_theta_y == NULL )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Nested structure input: Field 'y' required.");
+
+    // Read state and model parameters
+    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeParameter( pr_theta_y, theta->y );
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static
+void initializeData(const mxArray *prhs, Data *data)
+{
+    if( mxIsStruct(prhs) )
+    {
+        mxArray *pr_y = mxGetField( prhs, 0, "y" );
+
+        if( pr_y == NULL )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
+                "Structure input: Field 'y' required.");
+
+        if( !mxIsDouble(pr_y) || mxGetN(pr_y) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector of double required.");
+        
+        data->n = mxGetM(pr_y);
+        data->m = mxGetM(pr_y);
+        data->y = mxGetDoubles(pr_y);
+    }
+    else
+    {
+        if( !mxIsDouble(prhs) || mxGetN(prhs) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector of double required.");
+
+        data->n = mxGetM(prhs);
+        data->m = mxGetM(prhs);
+        data->y = mxGetDoubles(prhs);
+    }
+}
+
+static
+void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 {
     int t,n = data->n;
-    double nu = theta_y->scalar[0];
+    double nu = theta_y->nu;
     for (t=0; t<n; t++)
         data->y[t] = rng_t(nu) * exp(alpha[t]/2);
 }
 
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static
+void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int t,n = data->n;
-    double nu = theta_y->scalar[0];
+    double nu = theta_y->nu;
     double coeff = 0.5 * (nu + 1);
     double result = 0.0;
     for (t=0; t<n; t++) {
@@ -69,7 +121,8 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
     *log_f = result + n * (lgamma(coeff) -lgamma(0.5*nu) - 0.5 * log(nu*M_PI));
 }
 
-static inline void derivative( double y_t, double alpha_t, double nu, double *psi_t )
+static inline
+void derivative( double y_t, double alpha_t, double nu, double *psi_t )
 {
     double coeff = 0.5 * (nu + 1);
     double x = exp(-alpha_t) * int_pow(y_t,2) / nu;
@@ -89,12 +142,14 @@ static inline void derivative( double y_t, double alpha_t, double nu, double *ps
     psi_t[5] = coeff_x * (1- 11*x + 11*x2 - x3) * fr5;
 }
 
-static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+static 
+void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
 {
-    derivative(data->y[t], alpha, theta->y->scalar[0], psi_t);
+    derivative(data->y[t], alpha, theta->y->nu, psi_t);
 }
 
-static void compute_derivatives( Theta *theta, State *state, Data *data )
+static 
+void compute_derivatives( Theta *theta, State *state, Data *data )
 {
     int t, n = state->n;
     double nu = theta->y->scalar[0];
@@ -107,19 +162,23 @@ static void compute_derivatives( Theta *theta, State *state, Data *data )
   	}
 }
 
-static void initialize(void);
+static 
+void initializeModel(void);
 
-Observation_model student_SV = { initialize, 0 };
+Observation_model student_SV = { initializeModel, 0 };
 
-static void initialize()
+static
+void initializeModel()
 {
+    student_SV.n_theta = n_theta;
     student_SV.n_partials_t = n_partials_t;
     student_SV.n_partials_tp1 = n_partials_tp1;
     
     student_SV.usage_string = usage_string;
     
+    student_SV.initializeData = initializeData;
+    student_SV.initializeTheta = initializeTheta;
     student_SV.initializeParameter = initializeParameter;
-    student_SV.read_data = read_data;
     
     student_SV.draw_y__theta_alpha = draw_y__theta_alpha;
     student_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;

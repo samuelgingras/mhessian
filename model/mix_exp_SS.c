@@ -4,6 +4,7 @@
 #include "mex.h"
 #include "RNG.h"
 #include "state.h"
+#include "faa_di_bruno.h"
 
 
 static int n_theta = 2;
@@ -12,64 +13,126 @@ static int n_partials_tp1 = 0;
 
 
 static char *usage_string =
-"Name: exp_SCD\n"
-"Description: Linear combination of Exponential densitites for duration modeling\n"
+"Name: mix_exp_SS\n"
+"Description: Mixture of exponential densities for duration modeling\n"
 "Extra parameters: for j=1,...,J\n"
 "\tw_j\t Component weight of the jth exponential distribution\n"
 "\tlambda_j\t Shape parameter of the jth exponential distribution";
 
 
-static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
+static
+void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
-    mxArray *pr_w = mxGetField(prhs,0,"w");
-    mxArray *pr_l = mxGetField(prhs,0,"lambda");
+    // Set pointer to field
+    mxArray *pr_pi = mxGetField( prhs, 0, "pi" );
+    mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
     
-    ErrMsgTxt( pr_w != NULL || pr_l != NULL,
-        "Invalid input argument: two model paramters expected");
+    // Check for missing parameters
+    if( pr_pi == NULL )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Structure input: Field 'pi' required.");
+
+    if( pr_lambda == NULL )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Structure input: Field 'lambda' required.");
+
+    // Check parameters
+    if( !mxIsDouble(pr_pi) && mxGetN(pr_pi) != 1)
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Model parameter: Column vector of double required.");
+
+    if( !mxIsDouble(pr_lambda) && mxGetN(pr_lambda) != 1)
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Model parameter: Column vector of double required.");
     
-    mxCheckVector(pr_w);
-    mxCheckVector(pr_l);
-    
-    ErrMsgTxt( mxGetM(pr_w) == mxGetM(pr_l),
-        "Invalid input argument: incompatible vector length");
-    
-    theta_y->n = n_theta;
-    theta_y->m = mxGetM(pr_w);
-    theta_y->scalar = (double *) mxMalloc(theta_y->n * theta_y->m * sizeof( double ));
-    memcpy(theta_y->scalar, mxGetPr(pr_w), theta_y->m * sizeof( double ));
-    memcpy(theta_y->scalar + theta_y->m, mxGetPr(pr_l), theta_y->m * sizeof( double ));
+    if( mxGetM(pr_pi) != mxGetM(pr_lambda) )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Model parameter: Incompatible vector length.");
+
+    // Set pointer to theta_y
+    theta_y->m = mxGetM(pr_pi);
+    theta_y->pi_tm = mxGetDoubles(pr_pi);
+    theta_y->lambda_tm = mxGetDoubles(pr_lambda);
 }
 
-static void read_data(const mxArray *prhs, Data *data)
+static
+void initializeTheta(const mxArray *prhs, Theta *theta)
 {
-    mxArray *pr_y = mxGetField(prhs,0,"y");
-    
-    ErrMsgTxt( pr_y != NULL,
-        "Invalid input argument: data struct: 'y' field missing");
-    ErrMsgTxt( mxGetN(pr_y),
-        "Invalid input argument: data struct: column vector expected");
-    
-    data->n = mxGetM(pr_y);
-    data->m = mxGetM(pr_y);
-    data->y = mxGetPr(pr_y);
+    // Check structure input
+    if( !mxIsStruct(prhs) )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Structure input required.");
+
+    // Check nested structure
+    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
+    mxArray *pr_theta_y = mxGetField( prhs, 0, "y" );
+
+    if( pr_theta_x == NULL )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Nested structure input: Field 'x' required.");
+
+    if( pr_theta_y == NULL )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Nested structure input: Field 'y' required.");
+
+    // Read state and model parameters
+    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeParameter( pr_theta_y, theta->y );
 }
 
-static double log_f_y__theta_alpha_t(int m, double *a , double *lambda, double y_t, double alpha_t)
+static
+void initializeData(const mxArray *prhs, Data *data)
+{
+    if( mxIsStruct(prhs) )
+    {
+        mxArray *pr_y = mxGetField( prhs, 0, "y" );
+
+        if( pr_y == NULL )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
+                "Structure input: Field 'y' required.");
+
+        if( !mxIsDouble(pr_y) )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Vector of double required.");
+
+        if( mxGetN(pr_y) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector required.");
+
+        data->n = mxGetM(pr_y);
+        data->m = mxGetM(pr_y);
+        data->y = mxGetDoubles(pr_y);
+    }
+    else
+    {
+        if( !mxIsDouble(prhs) && mxGetN(prhs) != 1 )
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                "Column vector of double required.");
+
+        data->n = mxGetM(prhs);
+        data->m = mxGetM(prhs);
+        data->y = mxGetDoubles(prhs);
+    }
+}
+
+static 
+double log_f_y__theta_alpha_t(int m, double *pi , double *lambda, double y_t, double alpha_t)
 {
     double p_t = 0.0;
     for(int j=0; j<m; j++) {
         double g_jt = exp( -alpha_t - lambda[j] * exp(-alpha_t) * y_t );
-        p_t += a[j] * lambda[j] * g_jt;
+        p_t += pi[j] * lambda[j] * g_jt;
     }
     return log(p_t);
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static
+void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 {
     int t, n = data->n;
     int m = theta_y->m;
-    double *a = theta_y->scalar;
-    double *lambda = theta_y->scalar + m;
+    double *pi = theta_y->pi_tm;
+    double *lambda = theta_y->lambda_tm;
     
     double w[m];
     double cumul[m];
@@ -78,8 +141,8 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     // Compute weight and cumulative weight of proposal
     for(int j=0; j<m; j++)
     {
-        if(a[j] > 0.0)
-            w[j] = a[j];
+        if(pi[j] > 0.0)
+            w[j] = pi[j];
         else
             w[j] = 0.0;
         
@@ -102,7 +165,7 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
             double y_t_star = rng_exp( 1/mu );
             
             // Evaluate log likelihood
-            double log_f = log_f_y__theta_alpha_t(m, a, lambda, y_t_star, alpha[t]);
+            double log_f = log_f_y__theta_alpha_t(m, pi, lambda, y_t_star, alpha[t]);
             double log_g = log_f_y__theta_alpha_t(m, w, lambda, y_t_star, alpha[t]);
             
             // Accept/Reject
@@ -115,49 +178,22 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     }
 }
 
-static void compute_Faa_di_Bruno(int n, double *f, double *g, double *fg)
-{
-    fg[0] = f[0];
-    if( n >= 1) {
-        fg[1] = f[1]*g[1];
-        if( n >= 2 ) {
-            double g1_2 = g[1]*g[1];
-            fg[2] = f[1]*g[2] + f[2]*g1_2;
-            if( n >= 3 ) {
-                double g1_3 = g1_2*g[1];
-                fg[3] = f[1]*g[3] + 3*f[2]*g[1]*g[2] + f[3]*g1_3;
-                if( n >= 4 ) {
-                    double g2_2 = g[2]*g[2];
-                    double g1_4 = g1_3*g[1];
-                    fg[4] = f[1]*g[4] + 4*f[2]*g[1]*g[3]
-                        + 3*f[2]*g2_2 + 6*f[3]*g1_2*g[2] + f[4]*g1_4;
-                    if( n >= 5 ) {
-                        double g1_5 = g1_4*g[1];
-                        fg[5] = f[1]*g[5] + 5*f[2]*g[1]*g[4] + 10*f[2]*g[2]*g[3]
-                            + 15*f[3]*g2_2*g[1] + 10*f[3]*g[3]*g1_2 + 10*f[4]*g[2]*g1_3
-                                + f[5]*g1_5;
-                    }
-                }
-            }
-        }
-    }
-}
-
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static
+void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     int m = theta_y->m;
-    double *a = theta_y->scalar;
-    double *lambda = theta_y->scalar + m;
+    double *pi = theta_y->pi_tm;
+    double *lambda = theta_y->lambda_tm;
     
     *log_f = 0.0;
     
     for(int t=0; t<n; t++)
-        *log_f += log_f_y__theta_alpha_t(m, a, lambda, data->y[t], alpha[t]);
+        *log_f += log_f_y__theta_alpha_t(m, pi, lambda, data->y[t], alpha[t]);
 }
 
 static inline
-void derivative(double y_t, double alpha_t, int m, double *a, double *lambda, double *psi_t)
+void derivative(double y_t, double alpha_t, int m, double *pi, double *lambda, double *psi_t)
 {
     double h_jt[6];
     double g_jt[6];
@@ -180,7 +216,7 @@ void derivative(double y_t, double alpha_t, int m, double *a, double *lambda, do
         
         // Step 3: Direct computation
         for(int d=0; d<6; d++)
-                p_t[d] +=  a[j] * lambda[j] * g_jt[d];
+                p_t[d] +=  pi[j] * lambda[j] * g_jt[d];
     }
     
     // Step 4: Faa di Bruno with f(x) = log(x)
@@ -204,43 +240,46 @@ static
 void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
 {
     int m = theta->y->m;
-    double *a = theta->y->scalar;
-    double *lambda = theta->y->scalar + m;
+    double *pi = theta->y->pi_tm;
+    double *lambda = theta->y->lambda_tm;
     
-    derivative(data->y[t], alpha, m, a, lambda, psi_t);
+    derivative(data->y[t], alpha, m, pi, lambda, psi_t);
 }
 
 static
 void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int m = theta->y->m;
-    double *a = theta->y->scalar;
-    double *lambda = theta->y->scalar + m;
+    double *pi = theta->y->pi_tm;
+    double *lambda = theta->y->lambda_tm;
     
     int t, n = state->n;
     double *alpha = state->alC;
     double *psi_t;
     
     for(t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride )
-        derivative(data->y[t], alpha[t], m, a, lambda, psi_t);
+        derivative(data->y[t], alpha[t], m, pi, lambda, psi_t);
 }
 
-static void initialize(void);
+static void initializeModel(void);
 
-Observation_model exp_SCD = { initialize, 0 };
+Observation_model mix_exp_SS = { initializeModel, 0 };
 
 static void initialize()
 {
-    exp_SCD.n_partials_t = n_partials_t;
-    exp_SCD.n_partials_tp1 = n_partials_tp1;
+    mix_exp_SS.n_theta = n_theta;
+    mix_exp_SS.n_partials_t = n_partials_t;
+    mix_exp_SS.n_partials_tp1 = n_partials_tp1;
     
-    exp_SCD.usage_string = usage_string;
+    mix_exp_SS.usage_string = usage_string;
     
-    exp_SCD.initializeParameter = initializeParameter;
-    exp_SCD.read_data = read_data;
+    mix_exp_SS.initializeData = initializeData;
+    mix_exp_SS.initializeTheta = initializeTheta;
+    mix_exp_SS.initializeParameter = initializeParameter;
     
-    exp_SCD.draw_y__theta_alpha = draw_y__theta_alpha;
-    exp_SCD.log_f_y__theta_alpha = log_f_y__theta_alpha;
-    exp_SCD.compute_derivatives_t = compute_derivatives_t;
-    exp_SCD.compute_derivatives = compute_derivatives;
+    mix_exp_SS.draw_y__theta_alpha = draw_y__theta_alpha;
+    mix_exp_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+
+    mix_exp_SS.compute_derivatives_t = compute_derivatives_t;
+    mix_exp_SS.compute_derivatives = compute_derivatives;
 }

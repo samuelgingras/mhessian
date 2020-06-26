@@ -23,6 +23,11 @@ typedef struct {
     double eta;
     double kappa;
     double lambda;
+
+    double *pi_tm;
+    double *mu_tm;
+    double *sigma_tm;
+    double *lambda_tm;
 } Parameter;
 
 typedef struct {
