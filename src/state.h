@@ -8,10 +8,9 @@ typedef struct {
     int m;              // Nb of state
     double *y;          // Vector of observations
     
-    // SG: NEW variables for regime duration model
-    double *z;      // Latent indicator for regular/burst regime
+    double *s;      // Latent indicator for regular/burst regime
     double *k;      // State indicator
-    int *p;         // Position of state (computed using state indicator)
+    int *pos;         // Position of state (computed using state indicator)
 } Data;
 
 typedef struct {
@@ -19,12 +18,13 @@ typedef struct {
     int m;              // Nb of mixture
     double *scalar;
 
+    double r;
     double nu;
     double eta;
     double kappa;
     double lambda;
 
-    double *pi_tm;
+    double *p_tm;
     double *mu_tm;
     double *sigma_tm;
     double *lambda_tm;

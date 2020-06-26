@@ -21,20 +21,20 @@ static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
-    mxArray *pr_pi = mxGetField( prhs, 0, "pi" );
+    mxArray *pr_p = mxGetField( prhs, 0, "p" );
     mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
     
     // Check for missing parameters
-    if( pr_pi == NULL )
+    if( pr_p == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'pi' required.");
+            "Structure input: Field 'p' required.");
 
     if( pr_lambda == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Structure input: Field 'lambda' required.");
 
     // Check parameters
-    if( !mxIsDouble(pr_pi) && mxGetN(pr_pi) != 1)
+    if( !mxIsDouble(pr_p) && mxGetN(pr_p) != 1)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Column vector of double required.");
 
@@ -42,13 +42,13 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Column vector of double required.");
     
-    if( mxGetM(pr_pi) != mxGetM(pr_lambda) )
+    if( mxGetM(pr_p) != mxGetM(pr_lambda) )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Incompatible vector length.");
 
     // Set pointer to theta_y
-    theta_y->m = mxGetM(pr_pi);
-    theta_y->pi_tm = mxGetDoubles(pr_pi);
+    theta_y->m = mxGetM(pr_p);
+    theta_y->p_tm = mxGetDoubles(pr_p);
     theta_y->lambda_tm = mxGetDoubles(pr_lambda);
 }
 
@@ -131,21 +131,21 @@ void initializeData(const mxArray *prhs, Data *data)
     data->s = mxGetDoubles(pr_s);                               // Regime indicator
     data->k = mxGetDoubles(pr_k);                               // State indicator  
     data->m = (int) mxGetDoubles(pr_k)[data->n - 1];            // Nb of state
-    data->p = (int *) mxMalloc((data->n + 1) * sizeof(int));    // Position indicator
+    data->pos = (int *) mxMalloc((data->n + 1) * sizeof(int));  // Position indicator
     
     // Compute position indicator
     int i,j;
-    data->p[data->m] = mxGetM(pr_k);
+    data->pos[data->m] = mxGetM(pr_k);
     for(i=0, j=0; i < data->m; i++) {
         while(mxGetPr(pr_k)[j] <= (double) i) {
             j++;
         }
-        data->p[i] = j;
+        data->pos[i] = j;
     }
 }
 
 static inline 
-double f_y__theta_alpha_t(double alpha_t, double y_t, int m, double *pi, double *lambda)
+double f_y__theta_alpha_t(double alpha_t, double y_t, int m, double *p, double *lambda)
 {
     double f = 0.0;
     double yp = y_t + 1.0;
@@ -154,7 +154,7 @@ double f_y__theta_alpha_t(double alpha_t, double y_t, int m, double *pi, double 
     for(int j=0; j<m; j++)
     {
         double lambda_j = lambda[j] * exp(-alpha_t);
-        f += pi[j] * (exp(-lambda_j * ym) - exp(-lambda_j * yp));
+        f += p[j] * (exp(-lambda_j * ym) - exp(-lambda_j * yp));
     }
     
     return 0.5 * f;
@@ -166,7 +166,7 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     int t;
     int n = data->n;
     int m = theta_y->m;
-    double *pi = theta_y->pi_tm;
+    double *p = theta_y->p_tm;
     double *lambda = theta_y->lambda_tm;
     
     double p_t;
@@ -175,8 +175,8 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     for( t=0; t < n; t++ )
     {
         double alpha_t = alpha[(int)data->k[t] - 1];
-        if( (int)data->z[t] ){
-            p_t = f_y__theta_alpha_t(alpha_t, data->y[t], m, pi, lambda);
+        if( (int)data->s[t] ){
+            p_t = f_y__theta_alpha_t(alpha_t, data->y[t], m, p, lambda);
             *log_f += log(p_t);
         }
     }
@@ -188,7 +188,7 @@ void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     int t;
     int n = data->n;
     int m = theta_y->m;
-    double *pi = theta_y->pi_tm;
+    double *p = theta_y->p_tm;
     double *lambda = theta_y->lambda_tm;
     
     double f;
@@ -197,18 +197,18 @@ void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     for(t=0; t<n; t++)
     {        
         data->y[t] = 0.0;
-        f = f_y__theta_alpha_t(alpha[t], data->y[t], m, pi, lambda);
+        f = f_y__theta_alpha_t(alpha[t], data->y[t], m, p, lambda);
         u =  rng_rand();
         
         while( f < u )
         {
             data->y[t] += 1.0;
-            f += f_y__theta_alpha_t(alpha[t], data->y[t], m, pi, lambda);
+            f += f_y__theta_alpha_t(alpha[t], data->y[t], m, p, lambda);
         }
     }
 }
 
-static inline void derivative(int m, double *pi, double *lambda, double alpha_t, int t, int *p, double *y, double *z, double *psi_t)
+static inline void derivative(int m, double *p, double *lambda, double alpha_t, int t, int *pos, double *y, double *s, double *psi_t)
 {
     int i,j,d;
     
@@ -218,13 +218,13 @@ static inline void derivative(int m, double *pi, double *lambda, double alpha_t,
     psi_t[4] = 0.0;
     psi_t[5] = 0.0;
     
-    for(i = p[t]; i < p[t+1]; i++) {
+    for(i = pos[t]; i < pos[t+1]; i++) {
         
-        int z_i = (int) z[i];
+        int s_i = (int) s[i];
         double y_i = y[i];
         
         
-        if( z_i ) {
+        if( s_i ) {
             
             double ym_i = ((int)y_i == 0) ? 0.0 : (y_i - 1.0);
             double yp_i = y_i + 1.0;
@@ -260,7 +260,7 @@ static inline void derivative(int m, double *pi, double *lambda, double alpha_t,
                 
                 // Step 1c: Direct computation f_i(x) = a[j] * (f(x) - g(x))
                 for(d=0; d<6; d++)
-                    f_it[d] += pi[j] * (f[d] - g[d]);
+                    f_it[d] += p[j] * (f[d] - g[d]);
             }
             
             // Step 2: Faa di Bruno p_i(x) = log(f_i(x))
@@ -290,10 +290,10 @@ static inline void derivative(int m, double *pi, double *lambda, double alpha_t,
 static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
 {
     int m = theta->y->m;
-    double *pi = theta->y->pi_tm;
+    double *p = theta->y->p_tm;
     double *lambda = theta->y->lambda_tm;
     
-    derivative(m, pi, lambda, alpha, t, data->p, data->y, data->z, psi_t);
+    derivative(m, p, lambda, alpha, t, data->pos, data->y, data->s, psi_t);
 }
 
 
@@ -305,11 +305,11 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     double *psi_t;
     
     int m = theta->y->m;
-    double *pi = theta->y->pi_tm;
+    double *p = theta->y->p_tm;
     double *lambda = theta->y->lambda_tm;
     
     for(t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride )
-        derivative(m, pi, lambda, alpha[t], t, data->p, data->y, data->z, psi_t);
+        derivative(m, p, lambda, alpha[t], t, data->pos, data->y, data->s, psi_t);
 }
 
 

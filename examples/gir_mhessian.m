@@ -5,17 +5,17 @@
 
 % Simulation parameters
 M = 10^3;           % Nb of simulated block
-B = 100;            % Nb of draw by block
+B = 1000;           % Nb of draw by block
 N = 25;             % Nb of artificial observation
 
 % Model fixed parameters
-mu = -9.5;
+mu = 0.0;
 phi = 0.95;
 omega = 100.0;
 nu = 12.0;
 
 % Set model
-model = 'student_sd_SV';
+model = 'student_SV';
 
 % Initialize theta structure for hessianMethod
 theta.x.N = N;
@@ -84,7 +84,7 @@ for m=1:M
         y = drawObs( x, model, theta );
 
         % (c) Evaluate new draw (y,x)
-        hmout = hessianMethod( model, y, theta, 'GuessMode', x0, 'EvalAtState', x);
+        hmout = hessianMethod( model, y, theta, 'GuessMode', x0, 'EvalAtState', x );
 
         % Unpack hessianMethod output
         x0 = hmout.x_mode;
@@ -103,7 +103,7 @@ for m=1:M
     end
 
     % Store results for block b
-    postsim.count1(m,:) = mean( count1 ./ nbblock, 1 );
-    postsim.count2(m,:) = mean( count2 ./ nbblock, 1 );
+    postsim.count1(m,:) = mean( count1 ./ B, 1 );
+    postsim.count2(m,:) = mean( count2 ./ B, 1 );
 
 end

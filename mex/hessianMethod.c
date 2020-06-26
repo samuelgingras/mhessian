@@ -37,7 +37,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         ErrMsgTxt( nrhs >= 3,
         "Invalid inputs: Three input arguments expected");
         
-        ErrMsgTxt( nlhs == 1,
+        ErrMsgTxt( nlhs <= 2,
         "Invalid outputs: One or Two output argument expected");
                 
         // Assign model

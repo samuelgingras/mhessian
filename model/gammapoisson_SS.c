@@ -19,19 +19,19 @@ static char *usage_string =
 static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
-    mxArray *pr_nu = mxGetField( prhs, 0, "r" );
+    mxArray *pr_r = mxGetField( prhs, 0, "r" );
 
     // Check for missing parameter
-    if( pr_nu == NULL )
+    if( pr_r == NULL )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
             "Structure input: Field 'r' required.");
 
     // Check parameter
-    if( !mxIsScalar(pr_nu) )
+    if( !mxIsScalar(pr_r) )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
             "Model parameter: Scalar parameter required.");
 
-    if( mxGetScalar(pr_nu) < 0.0 )
+    if( mxGetScalar(pr_r) < 0.0 )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
             "Model parameter: Positive parameter required.");
 

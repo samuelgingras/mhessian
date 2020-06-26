@@ -24,12 +24,12 @@ static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
-    mxArray *pr_pi = mxGetField( prhs, 0, "pi" );
+    mxArray *pr_p = mxGetField( prhs, 0, "p" );
     mxArray *pr_mu = mxGetField( prhs, 0, "mu" );
     mxArray *pr_sigma = mxGetField( prhs, 0, "sigma" );
     
     // Check for missing parameters
-    if( pr_pi == NULL )
+    if( pr_p == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Structure input: Field 'pi' required.");
 
@@ -42,25 +42,25 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
             "Structure input: Field 'sigma' required.");
 
     // Check parameters
-    if( !mxIsDouble(pr_pi) && mxGetN(pr_pi) != 1)
+    if( !mxIsDouble(pr_p) || mxGetN(pr_p) != 1)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Column vector of double required.");
 
-    if( !mxIsDouble(pr_mu) && mxGetN(pr_mu) != 1)
+    if( !mxIsDouble(pr_mu) || mxGetN(pr_mu) != 1)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Column vector of double required.");
     
-    if( !mxIsDouble(pr_sigma) && mxGetN(pr_sigma) != 1)
+    if( !mxIsDouble(pr_sigma) || mxGetN(pr_sigma) != 1)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Column vector of double required.");
 
-    if( mxGetM(pr_pi) != mxGetM(pr_mu) || mxGetM(pr_pi) != mxGetM(pr_sigma) )
+    if( mxGetM(pr_p) != mxGetM(pr_mu) || mxGetM(pr_p) != mxGetM(pr_sigma) )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameter: Incompatible vector length.");
 
     // Set pointer to theta_y
-    theta_y->m = mxGetM(pr_pi);
-    theta_y->pi_tm = mxGetDoubles(pr_pi);
+    theta_y->m = mxGetM(pr_p);
+    theta_y->p_tm = mxGetDoubles(pr_p);
     theta_y->mu_tm = mxGetDoubles(pr_mu);
     theta_y->sigma_tm = mxGetDoubles(pr_sigma);
 }
@@ -115,7 +115,7 @@ void initializeData(const mxArray *prhs, Data *data)
     }
     else
     {
-        if( !mxIsDouble(prhs) && mxGetN(prhs) != 1 )
+        if( !mxIsDouble(prhs) || mxGetN(prhs) != 1 )
             mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                 "Column vector of double required.");
 
@@ -128,19 +128,21 @@ void initializeData(const mxArray *prhs, Data *data)
 static
 void draw_y__theta_alpha( double *alpha, Parameter *theta_y, Data *data )
 {
-    int t,n = data->n;
+    int t,j;
+    int n = data->n;
     int m = theta_y->m;
-    double *pi = theta_y->pi_tm;
+    double *p = theta_y->p_tm;
     double *mu = theta_y->mu_tm;
     double *sigma = theta_y->sigma_tm;
     double cumul[m];
     
     // Compute cumulative weight
-    cumul[0] = w[0];
-    for(int j=1; j < m; j++)
-        cumul[j] = pi[j] + cumul[j-1];
+    cumul[0] = p[0];
+    for( j=1; j<m; j++ )
+        cumul[j] = p[j] + cumul[j-1];
     
-    for(int t=0; t<n; t++) {
+    for( t=0; t<n; t++ )
+    {
         // Draw component
         int k = 0;
         double u = rng_rand();
@@ -149,75 +151,74 @@ void draw_y__theta_alpha( double *alpha, Parameter *theta_y, Data *data )
             k++;
         
         // Draw data
-        data->y[t] = exp(alpha[t]/2) * (mu[k] + sigma[k]*rng_gaussian());
+        data->y[t] = exp(0.5*alpha[t]) * ( mu[k] + sigma[k]*rng_gaussian() );
     }
 }
 
 static
 void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
-    int t,n = data->n;
+    int t,j;
+    int n = data->n;
     int m = theta_y->m;
-    double *pi = theta_y->pi_tm;
+    double *p = theta_y->p_tm;
     double *mu = theta_y->mu_tm;
     double *sigma = theta_y->sigma_tm;
-    double result = 0.0;
     
-    for(t=0; t<n; t++) {
-        double p_t = 0.0;
-        for(int j = 0; j < m; j++) {
-            double mu_jt = mu[j] * exp(alpha[t]/2);
-            double sigma_jt = sigma[j] * exp(alpha[t]/2);
-            double z_jt = (data->y[t] - mu_jt) / sigma_jt;
-            p_t += pi[j] * exp(-0.5 *z_jt * z_jt) / sigma_jt; 
+    *log_f = -0.5 * n * log(2*M_PI);
+    
+    for( t=0; t<n; t++ )
+    {
+        double f_t = 0.0;
+        double z_t = data->y[t] * exp(-0.5 * alpha[t]);
+        for( j=0; j<m; j++ )
+        {
+            double z_t_j = (z_t - mu[j]) / sigma[j];
+            f_t += p[j] / sigma[j] * exp(-0.5 * (z_t_j*z_t_j + alpha[t]));
         }
-        result += log(p_t);
+        *log_f += log(f_t);
     }
-    *log_f = result - n * 0.5 * log(2*M_PI);
 }
 
 static inline
-void derivative(double y_t, double alpha_t, int m, double *pi, double *mu, double *sigma,
+void derivative(double y_t, double alpha_t, int m, double *p, double *mu, double *sigma,
     double *psi_t)
 {
+    int j,d;
     double g_jt[6];
     double h_jt[6];
     
     double f_t[6];
-    double p_t[6];
+    double p_t[6] = { 0.0 };
     
-    for(int j = 0; j < m; j++)
+    for( j=0; j<m; j++ )
     {
+        double y_t_j = y_t / sigma[j];
+        double mu_sigma_j = mu[j] / sigma[j];
+
+        double A = y_t_j * y_t_j * exp(-alpha_t);
+        double B = y_t_j * mu_sigma_j * exp(-0.5 * alpha_t);
+        double C = mu_sigma_j * mu_sigma_j;
+        
         // Step 1 : Direct computation 	
-        double A = -0.5 / (sigma[j] * sigma[j]);
-        double B = y_t * y_t * exp(-alpha_t);
-        double C = y_t * mu[j] * exp(-alpha_t/2);
+        h_jt[0] = -0.5 * ( A - 2*B + C + alpha_t );
+        h_jt[1] = -0.5 * (-A + B + 1 );
+        h_jt[2] = -0.5 * ( A - 0.5*B );
+        h_jt[3] = -0.5 * (-A + 0.25*B );
+        h_jt[4] = -0.5 * ( A - 0.125*B );
+        h_jt[5] = -0.5 * (-A + 0.0625*B );
         
-        g_jt[0] = A * ( B - 2*C + mu[j]*mu[j]);
-        g_jt[1] = A * (-B + C);
-        g_jt[2] = A * ( B - 0.5*C);
-        g_jt[3] = A * (-B + 0.25*C);
-        g_jt[4] = A * ( B - 0.125*C);
-        g_jt[5] = A * (-B + 0.0625*C);
-        
-        
-        // Step 2 : Faa di Bruno with f(x) = exp(x)
-        f_t[0] = f_t[1] = f_t[2] = exp(g_jt[0]);
-        f_t[3] = f_t[4] = f_t[5] = exp(g_jt[0]);
-        compute_Faa_di_Bruno(5, f_t, g_jt, h_jt);
-        
+        // Step 2 : Faa di Bruno with g(x) = exp(h(x))
+        f_t[0] = f_t[1] = f_t[2] = exp(h_jt[0]);
+        f_t[3] = f_t[4] = f_t[5] = exp(h_jt[0]);
+        compute_Faa_di_Bruno(5, f_t, h_jt, g_jt);
         
         // Step 3 : Direct computation
-        for(int d=0; d<6; d++)
-        {
-            if(j == 0)
-                p_t[d] = pi[j] * h_jt[d] / sigma[j];
-            else
-                p_t[d] += pi[j] * h_jt[d] / sigma[j];
-        }
+        for( d=0; d<6; d++ )
+            p_t[d] += p[j] / sigma[j] * g_jt[d];
     }
     
-    // Step 4: Faa di Bruno with f(x) = log(x)
+    // Step 4: Faa di Bruno with psi(x) = log(p(x))
     double z = p_t[0];
     double z_2 = z * z;
     double z_3 = z_2 * z;
@@ -232,27 +233,24 @@ void derivative(double y_t, double alpha_t, int m, double *pi, double *mu, doubl
     f_t[5] = 24.0 / z_5;
     
     compute_Faa_di_Bruno(5, f_t, p_t, psi_t);
-    
-    // Adjust derivatives with the value of the first term
-    psi_t[0] -= 0.5 * (log(2*M_PI) + alpha_t);
-    psi_t[1] -= 0.5;
 }
 
-static void compute_derivatives_t( Theta *theta, Data *data, int t, double alpha, double *psi_t )
+static
+void compute_derivatives_t( Theta *theta, Data *data, int t, double alpha, double *psi_t )
 {
     int m = theta->y->m;
-    double *pi = theta->y->pi_tm;
+    double *p = theta->y->p_tm;
     double *mu = theta->y->mu_tm;
     double *sigma = theta->y->sigma_tm;
     
-    derivative(data->y[t], alpha, m, pi, mu, sigma, psi_t);
+    derivative(data->y[t], alpha, m, p, mu, sigma, psi_t);
 }
 
 static
 void compute_derivatives( Theta *theta, State *state, Data *data )
 {
     int m = theta->y->m;
-    double *pi = theta->y->pi_tm;
+    double *p = theta->y->p_tm;
     double *mu = theta->y->mu_tm;
     double *sigma = theta->y->sigma_tm;
     double *alpha = state->alC; 
@@ -261,7 +259,7 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
     int t, n = state->n;
     
     for(t=0, psi_t = state->psi; t < n; t++, psi_t += state->psi_stride )
-        derivative(data->y[t], alpha[t], m, pi, mu, sigma, psi_t);
+        derivative(data->y[t], alpha[t], m, p, mu, sigma, psi_t);
 }
 
 static
@@ -269,7 +267,8 @@ void initializeModel(void);
 
 Observation_model mix_gaussian_SV = { initializeModel, 0 };
 
-static void initializeModel()
+static
+void initializeModel()
 {
     mix_gaussian_SV.n_theta = n_theta;
     mix_gaussian_SV.n_partials_t = n_partials_t;

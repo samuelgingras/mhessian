@@ -152,7 +152,7 @@ static
 void compute_derivatives( Theta *theta, State *state, Data *data )
 {
     int t, n = state->n;
-    double nu = theta->y->scalar[0];
+    double nu = theta->y->nu;
     double *y = data->y; 
     double *alpha = state->alC; 
     double *psi_t;
