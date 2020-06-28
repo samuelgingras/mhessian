@@ -5,81 +5,73 @@
 #include "state.h"
 #include "errors.h"
 
-
-// Initial observation model
-extern Observation_model plain_SV;
+extern Observation_model gaussian_SV;
+extern Observation_model mix_gaussian_SV;
 extern Observation_model student_SV;
-extern Observation_model student_SV_AR;
-extern Observation_model Poisson_SS;
-extern Observation_model gammaPoisson_SS;
+extern Observation_model poisson_SS;
+extern Observation_model gammapoisson_SS;
 extern Observation_model exp_SS;
-
-// Additional observation model
-extern Observation_model mixture_SV;
-extern Observation_model student_sd_SV;
-extern Observation_model exp_SCD;
-extern Observation_model weibull_SS;
+extern Observation_model mix_exp_SS;
 extern Observation_model gamma_SS;
-extern Observation_model gen_gamma_SS;
-extern Observation_model regime_mix_exp_SS_cont;
-extern Observation_model regime_mix_exp_SS_disc;
+extern Observation_model weibull_SS;
+extern Observation_model gengamma_SS;
+extern Observation_model regime_mix_exp_SS;
+extern Observation_model regime_mix_exp_SS_tobs;
 
-Observation_model *assign_model(const mxArray *prhs)
+Observation_model *assignModel(const mxArray *prhs)
 {
-    mxArray *tmp = mxGetField(prhs, 0, "name");
-    ErrMsgTxt( tmp != NULL,
-    "Invalid input argument: model struct: 'name' missing");
-    
-    int name_length = mxGetN(tmp) + 1;
-    char *name = (char *) mxMalloc( name_length * sizeof(char) );
-    
+    char *name = NULL;
     Observation_model *model;
-    
-    if( mxGetString(tmp, name, (mwSize)name_length) )
+
+    if( mxIsStruct(prhs) )
     {
-        mexErrMsgTxt("Error assigning model \n");
+        mxArray *tmp = mxGetField( prhs, 0, "name" );
+        if( tmp != NULL && mxIsChar(tmp) )
+            name = mxArrayToString( tmp );
+        else
+            mexErrMsgIdAndTxt( "mhessian:missingInputs",
+                "Model: Field 'name' required." );
     }
-    else if( !strcmp(name, "plain_SV") )
+    else if( mxIsChar(prhs) )
+        name = mxArrayToString( prhs );
+    else
+        mexErrMsgIdAndTxt( "mhessian:missingInputs",
+            "Model name required.");
+
+    if( name == NULL )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
+            "Error reading model name." );
+
+
+    if( !strcmp(name, "gaussian_SV") )
     {
-        model = &plain_SV;
+        model = &gaussian_SV;
     }
-    else if( !strcmp(name, "mixture_SV") )
+    else if( !strcmp(name, "mix_gaussian_SV") )
     {
-        model = &mixture_SV;
+        model = &mix_gaussian_SV;
     }
     else if( !strcmp(name, "student_SV") )
     {
         model = &student_SV;
     }
-    else if( !strcmp(name, "student_sd_SV") )
+    else if( !strcmp(name, "poisson_SS") )
     {
-        model = &student_sd_SV;
+        model = &poisson_SS;
     }
-    else if( !strcmp(name, "student_SV_AR") )
+    else if( !strcmp(name, "gammapoisson_SS") )
     {
-        model = &student_SV_AR;
-    }
-    else if( !strcmp(name, "Poisson_SS") )
-    {
-        model = &Poisson_SS;
-    }
-    else if( !strcmp(name, "gammaPoisson_SS") )
-    {
-        model = &gammaPoisson_SS;
+        model = &gammapoisson_SS;
     }
     else if( !strcmp(name, "exp_SS") )
     {
         model = &exp_SS;
     }
-    else if( !strcmp(name, "exp_SCD") )
+    else if( !strcmp(name, "mix_exp_SS") )
     {
-        model = &exp_SCD;
+        model = &mix_exp_SS;
     }
-    else if( !strcmp(name, "gen_gamma_SS") )
-    {
-        model = &gen_gamma_SS;
-    }
-    else if( !strcmp(name, "gamma_SS") )
+        else if( !strcmp(name, "gamma_SS") )
     {
         model = &gamma_SS;
     }
@@ -87,17 +79,22 @@ Observation_model *assign_model(const mxArray *prhs)
     {
         model = &weibull_SS;
     }
-    else if( !strcmp(name, "regime_mix_exp_SS_cont") )
+    else if( !strcmp(name, "gengamma_SS") )
     {
-        model = &regime_mix_exp_SS_cont;
+        model = &gengamma_SS;
     }
-    else if( !strcmp(name, "regime_mix_exp_SS_disc") )
+    else if( !strcmp(name, "regime_mix_exp_SS") )
     {
-        model = &regime_mix_exp_SS_disc;
+        model = &regime_mix_exp_SS;
+    }
+    else if( !strcmp(name, "regime_mix_exp_SS_tobs") )
+    {
+        model = &regime_mix_exp_SS_tobs;
     }
     else
     {
-        mexErrMsgTxt("Unavailable model \n");
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Observation model not available.");
     }
     
     mxFree(name);

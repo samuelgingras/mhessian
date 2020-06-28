@@ -5,39 +5,48 @@
 #include "RNG.h"
 #include "state.h"
 
-static int n_theta = 1;
+static int n_theta = 3;
 static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
 
 static char *usage_string = 
-"Name: weibull_SS \n"
-"Description: Weibull multiplicative error model\n"
+"Name: gengamma_SS \n"
+"Description: Generalized Gamma multiplicative error model\n"
 "Extra parameters: \n"
-"\t eta \t \n";
+"\t eta \t \n"
+"\t kappa \t "
+"\t lambda \t \n";
+
 
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
     mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
+    mxArray *pr_kappa = mxGetField( prhs, 0, "kappa" );
     
     // Check for missing parameter
     if( pr_eta == NULL) 
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Structure input: Field 'eta' required.");
 
-    // Check parameter
-    if( !mxIsScalar(pr_eta) )
+    if( pr_kappa == NULL) 
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Scalar parameter required.");
+            "Structure input: Field 'kappa' required.");
 
-    if( mxGetScalar(pr_eta) < 0.0 )
+    // Check parameter
+    if( !mxIsScalar(pr_eta) || !mxIsScalar(pr_kappa) )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Positive parameter required.");
+            "Model parameters: Scalar parameters required.");
+
+    if( mxGetScalar(pr_eta) < 0.0 || mxGetScalar(pr_kappa) < 0.0 )
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Model parameters: Positive parameters required.");
 
     // Read model parameter
     theta_y->eta = mxGetScalar(pr_eta);
-    theta_y->lambda = exp( lgamma(1 + 1/theta_y->eta) );
+    theta_y->kappa = mxGetScalar(pr_kappa);
+    theta_y->lambda = exp(lgamma(theta_y->kappa + 1/theta_y->eta) - lgamma(theta_y->kappa));
 }
 
 static
@@ -96,38 +105,40 @@ void initializeData(const mxArray *prhs, Data *data)
     }
 }
 
-static
-void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 {
     int n = data->n;
+    double eta = theta_y->eta;
+    double kappa = theta_y->kappa;
     double scale = 1/theta_y->lambda;
     double shape = 1/theta_y->eta;
-
+    
     for(int t=0; t<n; t++)
     {
-        double u = rng_exp(1);
+        double u = rng_gamma(kappa,1);
         data->y[t] = exp(alpha[t]) * scale * pow(u,shape);
     }
 }
 
-static
-void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     double eta = theta_y->eta;
+    double kappa = theta_y->kappa;
     double lambda = theta_y->lambda;
+    double eta_kappa = eta * kappa;
 
-    *log_f = n * (log(eta) + eta * log(lambda));
+    *log_f = n * (log(eta) - lgamma(kappa) + eta_kappa * log(lambda));
 
     for(int t=0; t<n; t++)
     {
         double y_alpha_t = data->y[t] * exp(-alpha[t]) * lambda;
-        *log_f += (eta - 1) * log(data->y[t]) - pow(y_alpha_t, eta) - eta * alpha[t] ;
+        *log_f += (eta_kappa - 1) * log(data->y[t]) - pow(y_alpha_t, eta) - eta_kappa * alpha[t];
     }
 }
 
-static inline
-void derivative(double y_t, double eta, double lambda, double alpha_t, double *psi_t)
+static inline 
+void derivative(double y_t, double eta, double kappa, double lambda, double alpha_t, double *psi_t)
 {   
     double eta2 = eta  * eta;
     double eta3 = eta2 * eta;
@@ -136,54 +147,61 @@ void derivative(double y_t, double eta, double lambda, double alpha_t, double *p
 
     double y = y_t * exp(-alpha_t) * lambda;
     double z = pow(y,eta);
-
-    psi_t[1] =  eta  * z - eta;
+    
+    psi_t[1] =  eta  * z - eta * kappa;
     psi_t[2] = -eta2 * z;
     psi_t[3] =  eta3 * z;
     psi_t[4] = -eta4 * z;
     psi_t[5] =  eta5 * z;
 }
 
-static
+static 
 void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
 {
-    derivative( data->y[t], theta->y->eta, theta->y->lambda, alpha, psi_t );
+    double eta = theta->y->eta;
+    double kappa = theta->y->kappa;
+    double lambda = theta->y->lambda;
+
+    derivative( data->y[t], eta, kappa, lambda, alpha, psi_t );
 }
 
 static
 void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int n = state->n;
+    double eta = theta->y->eta;
+    double kappa = theta->y->kappa;
+    double lambda = theta->y->lambda;
     double *alpha = state->alC;
 
     for(int t=0; t<n; t++)
     {
         double *psi_t = state->psi + t * state->psi_stride;
-        derivative( data->y[t], theta->y->eta, theta->y->lambda, alpha[t], psi_t );
+        derivative( data->y[t], eta, kappa, lambda, alpha[t], psi_t );
     }
 }
 
 static
 void initializeModel(void);
 
-Observation_model weibull_SS = { initializeModel, 0 };
+Observation_model gengamma_SS = { initializeModel, 0 };
 
 static
 void initializeModel()
 {
-    weibull_SS.n_theta = n_theta;
-    weibull_SS.n_partials_t = n_partials_t;
-    weibull_SS.n_partials_tp1 = n_partials_tp1;
+    gengamma_SS.n_theta = n_theta;
+    gengamma_SS.n_partials_t = n_partials_t;
+    gengamma_SS.n_partials_tp1 = n_partials_tp1;
     
-    weibull_SS.usage_string = usage_string;
+    gengamma_SS.usage_string = usage_string;
     
-    weibull_SS.initializeData = initializeData;
-    weibull_SS.initializeTheta = initializeTheta;
-    weibull_SS.initializeParameter = initializeParameter;
+    gengamma_SS.initializeData = initializeData;
+    gengamma_SS.initializeTheta = initializeTheta;
+    gengamma_SS.initializeParameter = initializeParameter;
     
-    weibull_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    weibull_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    gengamma_SS.draw_y__theta_alpha = draw_y__theta_alpha;
+    gengamma_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
     
-    weibull_SS.compute_derivatives_t = compute_derivatives_t;
-    weibull_SS.compute_derivatives = compute_derivatives;
+    gengamma_SS.compute_derivatives_t = compute_derivatives_t;
+    gengamma_SS.compute_derivatives = compute_derivatives;
 }

@@ -24,22 +24,37 @@ void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[
     ErrMsgTxt( mxIsStruct(prhs[1]),
     "Invalid inputs: structure argument expected");
     
-    // Set pointer to each field (theta input)
-    mxArray *pr_N = mxGetField(prhs[0],0,"N");
-    mxArray *pr_d = mxGetField(prhs[0],0,"d");
-    mxArray *pr_mu = mxGetField(prhs[0],0,"mu");
-    mxArray *pr_phi = mxGetField(prhs[0],0,"phi");
-    mxArray *pr_omega = mxGetField(prhs[0],0,"omega");
-    
+    // Check if nested structure
+
+    mxArray *pr_N, *pr_d, *pr_mu, *pr_phi, *pr_omega;
+    mxArray *pr_theta_x = mxGetField( prhs[0], 0, "x" );
+    if( pr_theta_x == NULL )
+    {
+        pr_N = mxGetField( prhs[0], 0, "N" );
+        pr_d = mxGetField( prhs[0], 0, "d" );
+        pr_mu = mxGetField( prhs[0], 0, "mu" );
+        pr_phi = mxGetField( prhs[0], 0, "phi" );
+        pr_omega = mxGetField( prhs[0], 0, "omega" );
+
+    }
+    else
+    {
+        pr_N = mxGetField( pr_theta_x, 0, "N" );
+        pr_d = mxGetField( pr_theta_x, 0, "d" );
+        pr_mu = mxGetField( pr_theta_x, 0, "mu" );
+        pr_phi = mxGetField( pr_theta_x, 0, "phi" );
+        pr_omega = mxGetField( pr_theta_x, 0, "omega" );
+    }
+
     // Check for missing field (theta input)
     ErrMsgTxt( pr_N != NULL,
     "Invalid input argument: number of observation expected");
     ErrMsgTxt( pr_d != NULL || pr_mu != NULL,
     "Invalid input argument: mean/intercept parameter expected");
     ErrMsgTxt( pr_phi != NULL,
-    "Invalid input argument: persitence parameter expected");
+    "Invalid input argument: persistence parameter expected");
     ErrMsgTxt( pr_omega != NULL,
-    "Inbalid input argument: precision parameter expected");
+    "Invalid input argument: precision parameter expected");
     
     // Read number of observation
     ErrMsgTxt( mxIsScalar(pr_N),

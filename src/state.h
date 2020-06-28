@@ -8,10 +8,9 @@ typedef struct {
     int m;              // Nb of state
     double *y;          // Vector of observations
     
-    // SG: NEW variables for regime duration model
-    double *z;      // Latent indicator for regular/burst regime
+    double *s;      // Latent indicator for regular/burst regime
     double *k;      // State indicator
-    int *p;         // Position of state (computed using state indicator)
+    int *pos;         // Position of state (computed using state indicator)
 } Data;
 
 typedef struct {
@@ -19,9 +18,16 @@ typedef struct {
     int m;              // Nb of mixture
     double *scalar;
 
+    double r;
+    double nu;
     double eta;
     double kappa;
     double lambda;
+
+    double *p_tm;
+    double *mu_tm;
+    double *sigma_tm;
+    double *lambda_tm;
 } Parameter;
 
 typedef struct {
@@ -104,21 +110,21 @@ typedef struct {
 } State;
 
 typedef struct {
-    void (*initialize)(void);
-    
-    int n_partials_t;
-    int n_partials_tp1;
-    
-    char *usage_string;
-    
+    void (*initializeModel)(void);
+    void (*initializeData)(const mxArray *prhs, Data *data);    
+    void (*initializeTheta)(const mxArray *prhs, Theta *theta);
     void (*initializeParameter)(const mxArray *prhs, Parameter *theta_y);
-    void (*read_data)(const mxArray *prhs, Data *data);
     
     void (*draw_y__theta_alpha)(double *alpha, Parameter *theta_y, Data *data);
     void (*log_f_y__theta_alpha)(double *alpha, Parameter *theta_y, Data *data, double *log_f);
     
     void (*compute_derivatives_t)(Theta *theta, Data *data, int t, double alpha, double *psi_t);
     void (*compute_derivatives)(Theta *theta, State *state, Data *data);
+    
+    char *usage_string;
+    int n_theta;
+    int n_partials_t;
+    int n_partials_tp1;
 } Observation_model;
 
 typedef struct {
@@ -126,9 +132,10 @@ typedef struct {
     double **C_field_pointer;
 } Field;
 
-void initializeStateParameter( const mxArray *prhs, State_parameter *theta_alpha );
-void setDefaultOptions( State *state );
+void initializeThetaAlpha( const mxArray *prhs, State_parameter *theta_alpha );
 void readComputationOptions( const mxArray *prhs, State *state );
+State *stateAlloc( void );
+Theta *thetaAlloc( void );
+Data *dataAlloc( void );
 mxArray *mxStateAlloc( int n, Observation_model *model, State *state );
-Theta *mxThetaAlloc( void );
 #endif

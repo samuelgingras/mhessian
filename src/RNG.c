@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include "mex.h"
 #include "RNG.h"
 
@@ -20,7 +19,7 @@ static int mti=N+1;                 /* mti==N+1 means mt[N] is not initialized *
 /* Ziggurat Algorithm Parameter and Tables */
 #define PARAM_R 3.44428647676
 
-/* tabulated values for the heigt of the Ziggurat levels */
+/* tabulated values for the height of the Ziggurat levels */
 static const double ytab[128] = {
     1, 0.963598623011, 0.936280813353, 0.913041104253,
     0.892278506696, 0.873239356919, 0.855496407634, 0.838778928349,
@@ -138,11 +137,10 @@ static const double wtab[128] = {
 /* initializes mt[N] with a seed */
 void rng_init_rand( unsigned long s )
 {
-    
     mt[0]= s & 0xffffffffUL;
     for (mti=1; mti<N; mti++) {
         mt[mti] = 
-            (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti); 
+          (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti); 
         /* See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier. */
         /* In the previous versions, MSBs of the seed affect   */
         /* only MSBs of the array mt[].                        */
@@ -150,8 +148,6 @@ void rng_init_rand( unsigned long s )
         mt[mti] &= 0xffffffffUL;
         /* for >32 bit machines */
     }
-    
-        mexPrintf("RNG initialize robust hessian at seed %lu \n", s);
 }
 
 /* initialize by an array with array-length */
@@ -182,18 +178,6 @@ void rng_init_by_array(unsigned long init_key[], int key_length)
     mt[0] = 0x80000000UL; /* MSB is 1; assuring non-zero initial array */ 
 }
 
-static unsigned long get_seed_matlab( void )
-{
-    mxArray *lhs[1];
-    
-    mexCallMATLAB(1, lhs, 0, NULL, "rand");
-    
-    double r = mxGetScalar(lhs[0]);
-    int seed = ceil(5000*r);
-    
-    mxDestroyArray(lhs[0]);
-    return (unsigned long) seed;
-}
 
 /* generates a random number on [0,0xffffffff]-interval */
 static unsigned long rng_rand_int( void )
@@ -206,11 +190,7 @@ static unsigned long rng_rand_int( void )
         int kk;
 
         if (mti == N+1)   /* if rng_init_rand() has not been called, */
-        {
-            unsigned long seed = get_seed_matlab();
-            rng_init_rand( seed );
-        }
-            // rng_init_rand(5489UL); /* a default initial seed is used */
+            rng_init_rand(5489UL); /* a default initial seed is used */
 
         for (kk=0;kk<N-M;kk++) {
             y = (mt[kk]&UPPER_MASK)|(mt[kk+1]&LOWER_MASK);
@@ -266,8 +246,8 @@ double rng_gaussian ( void )
     
     while (1) {
         U = rng_rand_int();
-        i = U & 0x0000007F;		/* 7 bit to choose the step */
-        sign = U & 0x00000080;	/* 1 bit for the sign */
+        i = U & 0x0000007F;     /* 7 bit to choose the step */
+        sign = U & 0x00000080;  /* 1 bit for the sign */
         j = U>>8;               /* 24 bit for the x-value */
         
         x = j*wtab[i];
@@ -335,15 +315,15 @@ double rng_exp( double lambda )
 
 double rng_chi2( double v )
 {
-	return 2 * rng_gamma(v/2, 1.0);
+    return 2 * rng_gamma(v/2, 1.0);
 }
 
 double rng_t( double k )
 {
-	double z = rng_gaussian();
-	double c = rng_chi2(k);
-	
-	return z*sqrt(k/c);
+    double z = rng_gaussian();
+    double c = rng_chi2(k);
+    
+    return z*sqrt(k/c);
 }
 
 double rng_beta( double a,  double b )
@@ -730,8 +710,8 @@ double rng_chi2_pdf ( double x, double nu)
           return p;
         }
     }
-}		
-		
+}       
+        
 /* Homer's Method */
 double poly_eval(double *coeffs, int s, double x)
 {
