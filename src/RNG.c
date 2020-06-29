@@ -178,6 +178,19 @@ void rng_init_by_array(unsigned long init_key[], int key_length)
     mt[0] = 0x80000000UL; /* MSB is 1; assuring non-zero initial array */ 
 }
 
+static unsigned long get_seed_matlab( void )
+{
+    mxArray *plhs[1];
+
+    mexCallMATLAB(1, plhs, 0, NULL, "rand");
+    
+    double r = mxGetScalar(plhs[0]);
+    unsigned long seed = floor( 10000*r );
+    
+    mxDestroyArray(plhs[0]);
+
+    return seed;
+}
 
 /* generates a random number on [0,0xffffffff]-interval */
 static unsigned long rng_rand_int( void )
@@ -189,8 +202,11 @@ static unsigned long rng_rand_int( void )
     if (mti >= N) { /* generate N words at one time */
         int kk;
 
-        if (mti == N+1)   /* if rng_init_rand() has not been called, */
-            rng_init_rand(5489UL); /* a default initial seed is used */
+        // if (mti == N+1)   /* if rng_init_rand() has not been called, */
+        //     rng_init_rand(5489UL); /* a default initial seed is used */
+
+        if( mti == N+1 ) 
+          rng_init_rand( get_seed_matlab() );
 
         for (kk=0;kk<N-M;kk++) {
             y = (mt[kk]&UPPER_MASK)|(mt[kk+1]&LOWER_MASK);
