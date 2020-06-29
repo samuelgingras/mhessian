@@ -1,6 +1,13 @@
 #include <math.h>
 #include "mex.h"
 
+// The following functions are utilities for operations on 2nd order polynomials.
+// They give 2nd order polynomial results; higher order terms are dropped.
+// The vector (poly[0], poly[1], poly[2]) represents the polynomial
+//
+//    poly[0] + poly[1] x + poly[2] x^2.
+
+// full polynomial multiplication
 static inline void poly_mult(double *poly, const double *poly1, const double *poly2)
 {
     poly[0] = poly1[0]*poly2[0];
@@ -8,6 +15,7 @@ static inline void poly_mult(double *poly, const double *poly1, const double *po
     poly[2] = poly1[0]*poly2[2] + poly1[1]*poly2[1] + poly1[2]*poly2[0];
 }
 
+// polynomial assignment
 static inline void poly_copy(double *poly, const double *poly1)
 {
     int i;
@@ -15,6 +23,7 @@ static inline void poly_copy(double *poly, const double *poly1)
         poly[i] = poly1[i];
 }
 
+// polynomial addition
 static inline void poly_add(double *poly, const double *poly1)
 {
     int i;
@@ -22,6 +31,7 @@ static inline void poly_add(double *poly, const double *poly1)
         poly[i] += poly1[i];
 }
 
+// polynomial subtraction
 static inline void poly_subtract(double *poly, const double *poly1)
 {
     int i;
@@ -29,6 +39,7 @@ static inline void poly_subtract(double *poly, const double *poly1)
         poly[i] -= poly1[i];
 }
 
+// polynomial scalar multiplication
 static inline void poly_scalar_mult(double *poly, double c)
 {
     int i;
@@ -43,31 +54,35 @@ static inline void poly_recip_1m(double *poly, double *poly1)
     poly[2] = poly1[1] * poly1[1] + poly1[2] * (1 + 2*poly1[0]);
 }
 
+// mean of a polynomial function of a random variable with mean zero and 
+// variance Vareps_tp1
 static inline double poly_eval_mean(double *poly, double Vareps_tp1)
 {
     return poly[0] + poly[2]*Vareps_tp1;
 }
 
+// print a polynomial (in a variable e) to the Matlab console
 static inline void poly_print(char *s, double *poly)
 {
     mexPrintf("%s: %lf + %lf e + %lf e^2\n", s, poly[0], poly[1], poly[2]);
 }
 
-static inline double *mxStateGetPr( const mxArray *mxState, char *field_name)
+static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
 {
-    mxArray *field_pr = mxGetField(mxState,0,field_name);
+    mxArray *field_pr = mxGetField(mxState, 0, field_name);
     return mxGetPr(field_pr);
 }
 
 void compute_grad_Hess(
-    const mxArray *mxState,
+    const mxArray *mxState, // mode of state sequence, and related information
     int n,
     double *mu,
-    double phi,
-    double omega,
+    double phi,    // autoregressive parameter of state series
+    double omega,  // innovation precision (reciprocal of variance) of state series
     double *u,
-    double *grad,
-    double *Hess,
+    // Output
+    double *grad,  // gradiant of log target density log p(theta|y)
+    double *Hess,  // Hessian matrix of log target density log p(theta|y)
     double *var
     )
 {
@@ -120,6 +135,9 @@ void compute_grad_Hess(
     double Az_tm1 = diag_tr;
     double off_diag_tr = diag_tr;
     
+    // c_t is the posterior mean E[x_t|theta, y]
+    // and mu_t is the prior mean E[x_t|theta]
+    // m[t] is c_t - mu_t
     m[n-1] = const_t = x0[n-1] + Eeps_t - mu[n-1];
     grad[0] = (1-phi*phi) * (const_t * const_t + Vareps_t);
     grad[1] = phi * (const_t * const_t + Vareps_t);
@@ -226,9 +244,14 @@ void compute_grad_Hess(
         Ee4_tp1 = 3*Vareps_t*Vareps_t;
     }
     Hess[0] = -0.5*omega*grad[0];
+    // Add gradient of log normalization constant $k$
     grad[0] = Hess[0] + 0.5*n;
     grad[1] = grad[1] * h - phi;
     
+    // Elements of Hess
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
     Hess[1] = Hess[3] = 0.0;
     Hess[2] = Hess[6] = 0.0;
     Hess[4] = -(1-phi*phi) * h * Hess[4] - (1-phi*phi);
