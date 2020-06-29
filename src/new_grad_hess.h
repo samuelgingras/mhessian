@@ -4,15 +4,16 @@
 #define MEX_GRAD_HESS
 
 typedef struct {
-    double coeff_11;
-    double coeff_tt;
-    double coeff_ttp;
-} Q_mat;
-
-typedef struct {
-    double coeff_1;
-    double cooff_t;
-} q_vec;
+    double Q_11;
+    double Q_tt;
+    double Q_ttp;
+    double q_1;
+    double q_2;
+    double m_tm1[3];
+    double m_t[3];
+    double v_tm1[3];
+    double v_t[3];
+} Q_term;
 
 void compute_grad_Hess(
         const mxArray *mxState,
