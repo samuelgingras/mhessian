@@ -82,11 +82,11 @@ static inline void p_square(double *p, const double *p1)
 
 // polynomial expectation operator
 static inline void p_expect(
-    // Output, a polynomial in e_t approximating E[p(e_{t-1}) | e_t]
+    // Output, a polynomial in e_{t+1} approximating E[p(e_t) | e_{t+1}]
     double *Ep,
-    // Input, a polynomial in e_{t-1}
+    // Input, a polynomial in e_t
     double *p,
-    // E[e_t|e_{t+1}] and E[e_t^2|e_{t+1}], as polynomials in e_t
+    // E[e_t|e_{t+1}] and E[e_t^2|e_{t+1}], as polynomials in e_{t+1}
     double E1, double E2
     )
 {
@@ -97,12 +97,12 @@ static inline void p_expect(
 
 // polynomial covariance operator
 static inline void p_cov(
-    // Output, a polynomial in e_t approximating Cov[p1(e_{t-1}, p2(e_{t-1}) | e_t]
+    // Output, a polynomial in e_{t+1} approximating Cov[p1(e_t, p2(e_t) | e_{t+1}]
     double *Cp1p2,
-    // Inputs, polynomials in e_{t-1}
+    // Inputs, polynomials in e_t
     const double *p1, const double *p2,
-    // Var[e_{t-1} | e_t], Cov[e_{t-1}, e_{t-1}^2 | e_t] and Var[e_{t-1}^2 | e_t]
-    // as polynomials in e_t
+    // Var[e_t | e_{t+1}], Cov[e_t, e_t^2 | e_{t+1}] and Var[e_t^2 | e_{t+1}]
+    // as polynomials in e_{t+1}
     double *V1, double *C12, double *V2 
 )
 {
@@ -175,7 +175,7 @@ void compute_grad_Hess(
         // E1 and b give conditional mean of x_t given x_{t+1}
         p_set(E1,  mu0[t] - mu[t],  mud[t],          0.5*mudd[t]);
         p_set(b,   b[t] - mu[t],    bd[t],           0.5*bdd[t]);
-        p_set(S,   Sigma[tp1],      Sigma[t]*sd[t],  0.5*Sigma[t]*sdd[t]);
+        p_set(S,   Sigma[t],        Sigma[t]*sd[t],  0.5*Sigma[t]*sdd[t]);
 
         // Convert E1, b and Sigma to polynomials in
         //    e_{t+1} \equiv (x_{t+1} - x_{t+1}^\circ) + (x_{t+1}^\circ - mu_t)
@@ -257,6 +257,58 @@ void compute_grad_Hess(
         for (iQ = 0; iQ < 5; iQ++)
             p_copy(Q[iQ].m_tm1, Q[iQ].m_t)
     } // for(t=0; t<n-1; t++)
-    // Iteration n 
+
+    // Part 1 for iteration n
+
+    double E1_n = mu0[n-1] - mu[n-1];
+    double b_n = b[n-1] - mu[n-1];
+    double S_n = Sigma[n-1];
+    double delta_n = E1_b - b_n;
+    double V1_n = S_n - delta_n * delta_n;
+    double E2_n = V1 + E1 * E1;
+    double C12_n = 2.0 * b_n * V1_n + 4.0 * delta_n * S_n;
+    double V2_n = 4.0 * b_n * b_n * V1_n + 8.0 * b_n * delta_n * S_n + 2.0 * S_n * S_n;
+
+    // Part 2 for iteration n
+
+    // Compute m_n^{(i)} for quadratic forms
+    for (iQ = 0; iQ < 5; iQ++) {
+        if (iQ < 3)
+            Q[iQ].m_tm1[2] += Q[iQ].Q_11;
+        else
+            Q[IQ].m_tm1[1] += Q[iQ].q_1;
+        Q[iQ].m_n = Q[iQ].m_tm1[0] + Q[iQ].m_tm1[1] * E1_n + Q[iQ].m_tm1[2] * E2_n;
+    }
+
+    // Compute c_n^{(i,j)} results
+    for (iC = 0; iC < 6; iC++) {
+        Q_term *Qi = &(Q[C->i]), *Qj = &(Q[C->j]);
+        C[iC].c_n = C[iC].c_tm1[0] + C[iC].c_tm1[1] * E1_n + C[iC].c_tm1[2] * E2_n;
+    }
+
+    // Flat indices for a 3 x 3 matrix
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
+
+    // Assign elements of expected gradient
+    grad[0] = 
+    grad[1] = 
+    grad[2] =
+
+    // Assign elements of expected Hessian
+    Hess[0] = -0.5*omega*
+    Hess[1] = Hess[3] = 
+    Hess[4] = 
+    Hess[2] = Hess[6] = 
+    Hess[5] = Hess[7] = 
+
+    // Assign elements of variance of gradient
+    var[0] = 
+    var[1] = var[3] = 
+    var[4] = 
+    var[2] = var[6] = 
+    var[5] = var[7] =
+    var[8] = 
 
 } // void compute_grad_Hess(...)
