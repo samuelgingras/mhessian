@@ -53,6 +53,7 @@ mex(MEXOPTS{:}, 'mex/evalObs.c', OBSERVATION_MODEL{:}, OBSERVATION_DRAW{:})
 
 % TODO: add to options
 mex(MEXOPTS{:}, 'mex/grad_hess_approx.c', 'src/grad_hess.c')
+mex(MEXOPTS{:}, 'mex/new_grad_hess_approx.c', 'src/new_grad_hess.c')
 
 % Reset directory
 cd(DIRECTORY)

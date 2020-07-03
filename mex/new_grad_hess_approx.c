@@ -1,6 +1,6 @@
 #include <string.h>
 #include "mex.h"
-#include "grad_hess.h"
+#include "new_grad_hess.h"
 
 
 void ErrMsgTxt(bool assertion, const char *text)
@@ -12,7 +12,7 @@ void ErrMsgTxt(bool assertion, const char *text)
 void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[])
 {
     // Check number of input/output argument
-    ErrMsgTxt( nrhs == 3,
+    ErrMsgTxt( nrhs == 2,
     "Invalid inputs: Three input arguments expected");
     
     ErrMsgTxt( nlhs == 3,
@@ -93,11 +93,10 @@ void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[
     plhs[2] = mxCreateDoubleMatrix(3,3,mxREAL);
     
     // Set pointers
-    double *u = mxGetPr(prhs[2]);
     double *grad = mxGetPr(plhs[0]);
     double *Hess = mxGetPr(plhs[1]);
     double *var = mxGetPr(plhs[2]);
     
     
-    compute_grad_Hess(prhs[1], n, mu, phi, omega, u, grad, Hess, var);
+    compute_new_grad_Hess(prhs[1], n, mu, phi, omega, grad, Hess, var);
 }

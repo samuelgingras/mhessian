@@ -1,5 +1,7 @@
 #include <math.h>
+#include <string.h>
 #include "mex.h"
+#include "new_grad_hess.h"
 
 // The following functions are utilities for operations on 2nd order polynomials.
 // They give 2nd order polynomial results; any higher order terms are dropped.
@@ -79,10 +81,10 @@ static inline void p_expect(
     // Input, a polynomial in e_t
     double *p,
     // E[e_t|e_{t+1}] and E[e_t^2|e_{t+1}], as polynomials in e_{t+1}
-    double E1, double E2
+    const double *E1, const double *E2
     )
 {
-    p_set_scalar_mult(Ep, p[2], E2):
+    p_set_scalar_mult(Ep, p[2], E2);
     p_add_scalar_mult(Ep, p[1], E1);
     Ep[0] += p[0];
 }
@@ -95,7 +97,7 @@ static inline void p_cov(
     const double *p1, const double *p2,
     // Var[e_t | e_{t+1}], Cov[e_t, e_t^2 | e_{t+1}] and Var[e_t^2 | e_{t+1}]
     // as polynomials in e_{t+1}
-    double *V1, double *C12, double *V2 
+    const double *V1, const double *C12, const double *V2 
 )
 {
     p_add_scalar_mult(Cp1p2, p1[1] * p2[1], V1);
@@ -103,7 +105,13 @@ static inline void p_cov(
     p_add_scalar_mult(Cp1p2, p1[1] * p2[2] + p1[2] * p2[1], C12);
 }
 
-void compute_grad_Hess(
+static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
+{
+    mxArray *field_pr = mxGetField(mxState, 0, field_name);
+    return mxGetPr(field_pr);
+}
+
+void compute_new_grad_Hess(
     const mxArray *mxState,
     int n,
     double *mu,   // Prior mean of x, as a vector
@@ -115,7 +123,8 @@ void compute_grad_Hess(
     double *var   // 3 x 3 matrix, approximation of Var[g_{x|\theta}(\theta)]
     )
 {
-    int t;
+    int t, iQ, iC;
+    double *x0 = mxStateGetPr(mxState,"x_mode");
     double *b0 = mxStateGetPr(mxState,"b");     // Value,
     double *bd = mxStateGetPr(mxState,"bd");   // 1st derivative,
     double *bdd = mxStateGetPr(mxState,"bdd"); // and 2nd derivative, conditional mode
@@ -127,17 +136,18 @@ void compute_grad_Hess(
     double *sdd = mxStateGetPr(mxState,"sdd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[3], E2[3], C11[3], V1[3], V2[3];
-    double b[3], delta[3], delta_S[3], delta2[3], S2[3], b_delta_S[3], b_V1[3], b2_V1[3];
+    double E1[3], E2[3], C12[3], V1[3], V2[3];
+    double b[3], delta[3], S[3], delta_S[3], delta2[3], S2[3], b_delta_S[3];
+    double E12[3], b_V1[3], b2_V1[3];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
     // ------------------------------------------------------------------------------------
-    Qterm Q[5] = {0}; // Information about Q, Q_2, Q_{22}, q, q_2
+    Q_term Q[5] = {0}; // Information about Q, Q_2, Q_{22}, q, q_2
 
     // Set elements (1, 1), (t, t), (t, t+1) of the matrices Q, Q_2 and Q_{22}
     Q[0].Q_11 = 1.0;  Q[0].Q_tt = 1+phi*phi;                    Q[0].Q_ttp = -phi;
-    Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_tpp = -(1-phi*phi);
+    Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -(1-phi*phi);
     Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 2*phi*(1-phi*phi);
 
     // Set elements 1 and t of the vectors q and q_2
@@ -146,18 +156,18 @@ void compute_grad_Hess(
 
     // (i, j) coordinates for each of six required covariances
     // The covariance fields c_tm1 and c_t are set to zero
-    Cterm C[6] = {
+    C_term C[6] = {
         {0, 0, {0.0}, {0.0}},  // For Var[e^\top Q e]
         {0, 1, {0.0}, {0.0}},  // For Cov[e^\top Q e, e^\top Q_2 e]
         {1, 1, {0.0}, {0.0}},  // For Var[e^\top Q_2 e]
         {0, 3, {0.0}, {0.0}},  // For Cov[e^\top Q e, q e]
         {1, 3, {0.0}, {0.0}},  // For Cov[e^\top Q_2 e, q e]
         {3, 3, {0.0}, {0.0}}   // For Var[q e]
-    }
+    };
 
     for (t=0; t<n; t++) {
 
-        // Part 1: compute polynomials E1, E2, V1, V2, C11 approximating
+        // Part 1: compute polynomials E1, E2, V1, V2, C12 approximating
         // E[e_t|e_{t+1], E[e_t^2|e_{t+1}], Var[e_t|e_{t+1}], Var[e_t|e_{t+1}]
         // and Cov[e_t,e_t^2|e_{t+1}]. Polynomials are 2nd order in e_{t+1}
         // -------------------------------------------------------------------
@@ -198,10 +208,10 @@ void compute_grad_Hess(
         p_subtract(V1, S, delta2);
         p_add(E2, V1, E12);
 
-        // Computation of C11 = Cov[e_t, e_t^2|e_{t+1}]
+        // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
         p_mult(b_V1, b, V1);
-        p_set_scalar_mult(C11, 2.0, b_V1);
-        p_add_scalar_mult(C11, 4.0, delta_S);
+        p_set_scalar_mult(C12, 2.0, b_V1);
+        p_add_scalar_mult(C12, 4.0, delta_S);
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
         p_mult(b2_V1, b, b_V1);
@@ -221,9 +231,9 @@ void compute_grad_Hess(
             // \tilde{m}^{(i)}_{t-1} and compute all terms of \tilde{m}^{(i)}_t
             // except the one with the expectation of e_t e_{t+1} 
             if (iQ < 3)
-                Qi->m_tm1[2] += ((t==0) || (t==n-1)) Qi->Q_11 : Qi->Q_tt;
+                Qi->m_tm1[2] += ((t==0) || (t==n-1)) ? Qi->Q_11 : Qi->Q_tt;
             else
-                Qi->m_tm1[1] += ((t==0) || (t==n-1)) Qi->q_1 : Qi->q_t;
+                Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
             p_expect(Qi->m_t, Qi->m_tm1, E1, E2);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
@@ -257,7 +267,7 @@ void compute_grad_Hess(
                 Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
                 Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
             }
-            memcpy(Ci->c _tm1, Ci->c_t, 3 * sizeof(double));
+            memcpy(Ci->c_tm1, Ci->c_t, 3 * sizeof(double));
         }
         for (iQ = 0; iQ < 5; iQ++)
             memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 3 * sizeof(double));
@@ -279,6 +289,7 @@ void compute_grad_Hess(
     Hess[4] = -0.5 * omega * Q[1].m_t[0];
     Hess[2] = Hess[6] = omega * Q[3].m_t[0];
     Hess[5] = Hess[7] = omega * Q[4].m_t[0];
+    Hess[8] = -omega * (1-phi) * (n * (1-phi) - 2*phi);
 
     // Assign elements of variance of gradient
     var[0] = 0.25 * omega * omega * C[0].c_t[0];

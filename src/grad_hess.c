@@ -1,5 +1,6 @@
 #include <math.h>
 #include "mex.h"
+#include "grad_hess.h"
 
 // The following functions are utilities for operations on 2nd order polynomials.
 // They give 2nd order polynomial results; higher order terms are dropped.
