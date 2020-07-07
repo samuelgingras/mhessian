@@ -70,8 +70,8 @@ static inline void p_mult(double *p, const double *p1, const double *p2)
 static inline void p_square(double *p, const double *p1)
 {
     p[0] = p1[0]*p1[0];
-    p[1] = 2*p1[0]*p1[2];
-    p[2] = p1[1]*p1[1] + 2*p1[0]*p[2];
+    p[1] = 2*p1[0]*p1[1];
+    p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
 }
 
 // polynomial expectation operator
@@ -103,6 +103,20 @@ static inline void p_cov(
     p_add_scalar_mult(Cp1p2, p1[1] * p2[1], V1);
     p_add_scalar_mult(Cp1p2, p1[2] * p2[2], V2);
     p_add_scalar_mult(Cp1p2, p1[1] * p2[2] + p1[2] * p2[1], C12);
+}
+
+// print a polynomial (in a variable e) to the Matlab console
+static inline void poly_print(char *s, double *poly)
+{
+    mexPrintf("%s: %lf + %lf e + %lf e^2\n", s, poly[0], poly[1], poly[2]);
+}
+
+static inline void Q_print(char *s, Q_term *Q)
+{
+    mexPrintf("%s: Q_11 = %lf, Q_tt = %lf, Q_ttp = %lf, q_1 = %lf, q_t = %lf\n",
+        s, Q->Q_11, Q->Q_tt, Q->Q_ttp, Q->q_1, Q->q_t);
+    mexPrintf("\tm_t = (%lf, %lf, %lf)\n", Q->m_t[0], Q->m_t[1], Q->m_t[2]);
+    mexPrintf("\tm_tm1 = (%lf, %lf, %lf)\n\n", Q->m_tm1[0], Q->m_tm1[1], Q->m_tm1[2]);
 }
 
 static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
@@ -146,9 +160,9 @@ void compute_new_grad_Hess(
     Q_term Q[5] = {0}; // Information about Q, Q_2, Q_{22}, q, q_2
 
     // Set elements (1, 1), (t, t), (t, t+1) of the matrices Q, Q_2 and Q_{22}
-    Q[0].Q_11 = 1.0;  Q[0].Q_tt = 1+phi*phi;                    Q[0].Q_ttp = -phi;
-    Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -(1-phi*phi);
-    Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 2*phi*(1-phi*phi);
+    Q[0].Q_11 = 1.0;  Q[0].Q_tt = 1+phi*phi;                    Q[0].Q_ttp = -2*phi;
+    Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -2*(1-phi*phi);
+    Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 4*phi*(1-phi*phi);
 
     // Set elements 1 and t of the vectors q and q_2
     Q[3].q_1 = 1-phi;         Q[3].q_t = (1-phi)*(1-phi);
@@ -165,6 +179,19 @@ void compute_new_grad_Hess(
         {3, 3, {0.0}, {0.0}}   // For Var[q e]
     };
 
+    // Compute d statistics 
+    double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
+    double dtm1 = d1;
+    double dt_sum = 0.0, dttp_sum = 0.0;
+    for (t=1; t<n-1; t++) {
+        double dt = x0[t] - mu[t];
+        dt_sum += dt;
+        dt2_sum += dt * dt;
+        dttp_sum+ += dt * dtm1;
+        dtm1 = dt;
+    }
+    dttp_sum += dtm1 * dn;
+
     for (t=0; t<n; t++) {
 
         // Part 1: compute polynomials E1, E2, V1, V2, C12 approximating
@@ -175,22 +202,13 @@ void compute_new_grad_Hess(
         // Form E1, b and S polynomials as polynomials in
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
-        p_set(E1,  mu0[t] - mu[t],  mud[t],          0.5*mudd[t]);
-        p_set(b,   b0[t] - mu[t],   bd[t],           0.5*bdd[t]);
+        p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
+        p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
         p_set(S,   Sigma[t],        Sigma[t]*sd[t],  0.5*Sigma[t]*sdd[t]);
 
-        // Convert E1, b and Sigma to polynomials in
-        //    e_{t+1} \equiv (x_{t+1} - x_{t+1}^\circ) + (x_{t+1}^\circ - mu_t)
-        //    giving values in terms of x_t, then 
-        if (t<n-1) {
-            double c = x0[t+1] - mu[t+1];
-            p_change_var(E1, c);
-            p_change_var(b,  c);
-            p_change_var(S,  c);
-        }
-        else { // Last value is unconditional,  
-            p_set(E1, mu0[t] - mu[t], 0.0, 0.0);
-            p_set(b, b0[t] - mu[t], 0.0, 0.0);
+        if (t==n-1) { // Last value is unconditional,  
+            p_set(E1, mu0[t] - x0[t], 0.0, 0.0);
+            p_set(b, b0[t] - x0[t], 0.0, 0.0);
             p_set(S, Sigma[t], 0.0, 0.0);
         }
 
@@ -219,6 +237,16 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(V2, 8.0, b_delta_S);
         p_add_scalar_mult(V2, 2.0, S2);
 
+        if (t%100 == 0) {
+            poly_print("E1", E1);
+        //    poly_print("b", b);
+        //    poly_print("S", S);
+        //    poly_print("V1", V1);
+            poly_print("E2", E2);
+        //    poly_print("V2", V2);
+        //    poly_print("C12", C12);
+        }
+
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
         // in sequential procedure
         // -----------------------------------------------------------------------
@@ -241,6 +269,11 @@ void compute_new_grad_Hess(
                 Qi->m_t[1] += Qi->Q_ttp * E1[0];
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
             }
+        }
+
+        if (t%100 == 0) {
+            //Q_print("First quadratic", Q);
+            Q_print("First linear", Q+3);
         }
 
         // Compute c_t^{(i,j)}(e_{t+1}) polynomials
@@ -281,7 +314,7 @@ void compute_new_grad_Hess(
     // Assign elements of expected gradient
     grad[0] = 0.5 * (n - omega * Q[0].m_t[0]); 
     grad[1] = -phi - 0.5 * omega * Q[1].m_t[0];
-    grad[2] = omega * Q[2].m_t[0];
+    grad[2] = omega * Q[3].m_t[0];
 
     // Assign elements of expected Hessian
     Hess[0] = -0.5 * omega * Q[0].m_t[0];
