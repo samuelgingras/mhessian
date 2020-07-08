@@ -171,12 +171,12 @@ void compute_new_grad_Hess(
     // (i, j) coordinates for each of six required covariances
     // The covariance fields c_tm1 and c_t are set to zero
     C_term C[6] = {
-        {0, 0, {0.0}, {0.0}},  // For Var[e^\top Q e]
-        {0, 1, {0.0}, {0.0}},  // For Cov[e^\top Q e, e^\top Q_2 e]
-        {1, 1, {0.0}, {0.0}},  // For Var[e^\top Q_2 e]
-        {0, 3, {0.0}, {0.0}},  // For Cov[e^\top Q e, q e]
-        {1, 3, {0.0}, {0.0}},  // For Cov[e^\top Q_2 e, q e]
-        {3, 3, {0.0}, {0.0}}   // For Var[q e]
+        {0, 0, {0.0}, {0.0}},  // 0, for Var[e^\top Q e]
+        {0, 1, {0.0}, {0.0}},  // 1, for Cov[e^\top Q e, e^\top Q_2 e]
+        {1, 1, {0.0}, {0.0}},  // 2, for Var[e^\top Q_2 e]
+        {0, 3, {0.0}, {0.0}},  // 3, for Cov[e^\top Q e, q e]
+        {1, 3, {0.0}, {0.0}},  // 4, for Cov[e^\top Q_2 e, q e]
+        {3, 3, {0.0}, {0.0}}   // 5  for Var[q e]
     };
 
     // Variables for computing d statistics
@@ -209,6 +209,7 @@ void compute_new_grad_Hess(
             p_set(E1,  mu0[t] - x0[t],  0.0,             0.0);
             p_set(b,   b0[t] - x0[t],   0.0,             0.0);
             p_set(S,   S0,              0.0,             0.0);
+            p_set(S2,  S20,             0.0,             0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -345,7 +346,7 @@ void compute_new_grad_Hess(
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
     var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
     var[4] = 0.25 * omega * omega * C[2].c_t[0];
-    var[2] = var[6] = 0.25 * omega * omega * C[3].c_t[0];
-    var[5] = var[7]= 0.25 * omega * omega * C[4].c_t[0];
-    var[8] = 0.25 * omega * omega * C[5].c_t[0];
+    var[2] = var[6] = 0.5 * omega * omega * C[3].c_t[0];
+    var[5] = var[7]= 0.5 * omega * omega * C[4].c_t[0];
+    var[8] = omega * omega * C[5].c_t[0];
 } // void compute_grad_Hess(...)
