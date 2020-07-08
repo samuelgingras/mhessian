@@ -205,6 +205,7 @@ void compute_new_grad_Hess(
             p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t]);
         }
         else { // Last value is unconditional.
+            dtp1 = 0.0;
             p_set(E1,  mu0[t] - x0[t],  0.0,             0.0);
             p_set(b,   b0[t] - x0[t],   0.0,             0.0);
             p_set(S,   S0,              0.0,             0.0);
@@ -255,15 +256,18 @@ void compute_new_grad_Hess(
             // Add terms for e_t and e_t^2 in z^{(i)}(e_t, e_{t+1}) to
             // \tilde{m}^{(i)}_{t-1} and compute all terms of \tilde{m}^{(i)}_t
             // except the one with the expectation of e_t e_{t+1} 
-            if (iQ < 3)
-                Qi->m_tm1[2] += ((t==0) || (t==n-1)) ? Qi->Q_11 : Qi->Q_tt;
+            if (iQ < 3) {
+                double Q_tt = ((t==0) || (t==n-1)) ? Qi->Q_11 : Qi->Q_tt; 
+                Qi->m_tm1[1] += 2*Q_tt * dt + Qi->Q_ttp * dtp1;
+                Qi->m_tm1[2] += Q_tt;
+            }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
             p_expect(Qi->m_t, Qi->m_tm1, E1, E2);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
-                Qi->m_t[1] += Qi->Q_ttp * E1[0];
+                Qi->m_t[1] += Qi->Q_ttp * (dt + E1[0]);
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
             }
         }
