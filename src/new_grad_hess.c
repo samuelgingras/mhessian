@@ -179,26 +179,9 @@ void compute_new_grad_Hess(
         {3, 3, {0.0}, {0.0}}   // For Var[q e]
     };
 
-    // Compute d statistics and store them
+    // Variables for computing d statistics
     double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
-    double dtm1 = d1;
-    double dt_sum = 0.0, dt2_sum = 0.0, dttp_sum = 0.0;
-    for (t=1; t<n-1; t++) {
-        double dt = x0[t] - mu[t];
-        dt_sum += dt;
-        dt2_sum += dt * dt;
-        dttp_sum += dt * dtm1;
-        dtm1 = dt;
-    }
-    dttp_sum += dtm1 * dn;
-    for (iQ=0; iQ<3; iQ++) {
-        Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
-        Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum;
-        Q[iQ].dQd += Q[iQ].Q_ttp * dttp_sum;
-    }
-    for (iQ=3; iQ<5; iQ++) {
-        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
-    }
+    double dt = d1, dtp1 = 0.0, dt_sum = 0.0, dt2_sum = 0.0, dttp_sum = 0.0;
 
     for (t=0; t<n; t++) {
 
@@ -211,15 +194,20 @@ void compute_new_grad_Hess(
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
         double S0 = Sigma[t], S20 = Sigma[t]*Sigma[t];
-        p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
-        p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
-        p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t]);
-        p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t]);
-
-        if (t==n-1) { // Last value is unconditional,  
-            p_set(E1, mu0[t] - x0[t], 0.0, 0.0);
-            p_set(b, b0[t] - x0[t], 0.0, 0.0);
-            p_set(S, Sigma[t], 0.0, 0.0);
+        if (t<n-1) {
+            dtp1 = x0[t+1] - mu[t+1];
+            dttp_sum += dt * dtp1;
+            dt_sum += dt;
+            dt2_sum += dt * dt;
+            p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
+            p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
+            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t]);
+            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t]);
+        }
+        else { // Last value is unconditional.
+            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0);
+            p_set(b,   b0[t] - x0[t],   0.0,             0.0);
+            p_set(S,   S0,              0.0,             0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -311,9 +299,23 @@ void compute_new_grad_Hess(
             }
             memcpy(Ci->c_tm1, Ci->c_t, 3 * sizeof(double));
         }
+        dt = dtp1;
         for (iQ = 0; iQ < 5; iQ++)
             memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 3 * sizeof(double));
     } // for(t=0; t<n-1; t++)
+
+    // To avoid double counting
+    dt_sum -= d1;
+    dt2_sum -= d1 * d1;
+    for (iQ=0; iQ<3; iQ++) {
+        // Compute constant part of quadratic forms
+        Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
+        Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum + Q[iQ].Q_ttp * dttp_sum;
+    }
+    // ... and linear forms.
+    for (iQ=3; iQ<5; iQ++) {
+        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
+    }
 
     // Flat indices for a 3 x 3 matrix
     // 0 1 2
