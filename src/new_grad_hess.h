@@ -11,6 +11,8 @@ typedef struct {
     double q_t;
     double m_tm1[3];
     double m_t[3];
+    double dQd;
+    double qd;
 } Q_term;
 
 typedef struct {

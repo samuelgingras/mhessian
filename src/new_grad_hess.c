@@ -179,18 +179,26 @@ void compute_new_grad_Hess(
         {3, 3, {0.0}, {0.0}}   // For Var[q e]
     };
 
-    // Compute d statistics 
+    // Compute d statistics and store them
     double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
     double dtm1 = d1;
-    double dt_sum = 0.0, dttp_sum = 0.0;
+    double dt_sum = 0.0, dt2_sum = 0.0, dttp_sum = 0.0;
     for (t=1; t<n-1; t++) {
         double dt = x0[t] - mu[t];
         dt_sum += dt;
         dt2_sum += dt * dt;
-        dttp_sum+ += dt * dtm1;
+        dttp_sum += dt * dtm1;
         dtm1 = dt;
     }
     dttp_sum += dtm1 * dn;
+    for (iQ=0; iQ<3; iQ++) {
+        Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
+        Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum;
+        Q[iQ].dQd += Q[iQ].Q_ttp * dttp_sum;
+    }
+    for (iQ=3; iQ<5; iQ++) {
+        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
+    }
 
     for (t=0; t<n; t++) {
 
@@ -202,9 +210,11 @@ void compute_new_grad_Hess(
         // Form E1, b and S polynomials as polynomials in
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
+        double S0 = Sigma[t], S20 = Sigma[t]*Sigma[t];
         p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
         p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
-        p_set(S,   Sigma[t],        Sigma[t]*sd[t],  0.5*Sigma[t]*sdd[t]);
+        p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t]);
+        p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t]);
 
         if (t==n-1) { // Last value is unconditional,  
             p_set(E1, mu0[t] - x0[t], 0.0, 0.0);
@@ -220,7 +230,6 @@ void compute_new_grad_Hess(
         p_mult(b_delta_S, b, delta_S);
         p_square(E12, E1);
         p_square(delta2, delta);
-        p_square(S2, S);
 
         // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
         p_subtract(V1, S, delta2);
@@ -237,7 +246,7 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(V2, 8.0, b_delta_S);
         p_add_scalar_mult(V2, 2.0, S2);
 
-        if (t%100 == 0) {
+        if (t%1000 == 0) {
             poly_print("E1", E1);
         //    poly_print("b", b);
         //    poly_print("S", S);
@@ -271,8 +280,8 @@ void compute_new_grad_Hess(
             }
         }
 
-        if (t%100 == 0) {
-            //Q_print("First quadratic", Q);
+        if (t%1000 == 0) {
+            Q_print("First quadratic", Q);
             Q_print("First linear", Q+3);
         }
 
@@ -312,17 +321,19 @@ void compute_new_grad_Hess(
     // 6 7 8
 
     // Assign elements of expected gradient
-    grad[0] = 0.5 * (n - omega * Q[0].m_t[0]); 
-    grad[1] = -phi - 0.5 * omega * Q[1].m_t[0];
-    grad[2] = omega * Q[3].m_t[0];
+    grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
+    grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+    grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
+
+    mexPrintf("Q[2].dQd: %lf, Q[2].m_t[0]: %lf\n", Q[2].dQd, Q[2].m_t[0]);
 
     // Assign elements of expected Hessian
-    Hess[0] = -0.5 * omega * Q[0].m_t[0];
-    Hess[1] = Hess[3] = -0.5 * omega * Q[1].m_t[0];
-    Hess[4] = -0.5 * omega * Q[1].m_t[0];
-    Hess[2] = Hess[6] = omega * Q[3].m_t[0];
-    Hess[5] = Hess[7] = omega * Q[4].m_t[0];
-    Hess[8] = -omega * (1-phi) * (n * (1-phi) - 2*phi);
+    Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
+    Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+    Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
+    Hess[2] = Hess[6] = omega * (Q[3].qd + Q[3].m_t[0]);
+    Hess[5] = Hess[7] = omega * (Q[4].qd + Q[4].m_t[0]);
+    Hess[8] = -omega * (1-phi) * (n * (1-phi) + 2*phi);
 
     // Assign elements of variance of gradient
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
