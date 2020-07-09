@@ -139,6 +139,7 @@ void compute_new_grad_Hess(
 {
     int t, iQ, iC;
     double *x0 = mxStateGetPr(mxState,"x_mode");
+    double *ad = mxStateGetPr(mxState,"ad");
     double *b0 = mxStateGetPr(mxState,"b");     // Value,
     double *bd = mxStateGetPr(mxState,"bd");   // 1st derivative,
     double *bdd = mxStateGetPr(mxState,"bdd"); // and 2nd derivative, conditional mode
@@ -193,7 +194,8 @@ void compute_new_grad_Hess(
         // Form E1, b and S polynomials as polynomials in
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
-        double S0 = Sigma[t], S20 = Sigma[t]*Sigma[t];
+        double S0 = Sigma[t], S20;
+        double bd_ad = bd[t]/ad[t];
         if (t<n-1) {
             dtp1 = x0[t+1] - mu[t+1];
             dttp_sum += dt * dtp1;
@@ -201,8 +203,11 @@ void compute_new_grad_Hess(
             dt2_sum += dt * dt;
             p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
             p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
-            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t]);
-            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t]);
+
+            //S0 *= exp(sd[t]*b[0]/ad[t]);
+            S20 = S0*S0;
+            p_set(S,   S0,   S0*sd[t],     0.5*S0*sdd[t]);
+            p_set(S2,  S20,  2*S20*sd[t],  S20*sdd[t]);
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
