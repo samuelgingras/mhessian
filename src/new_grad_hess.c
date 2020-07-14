@@ -99,12 +99,13 @@ static inline void p_cov(
     const double *p1, const double *p2,
     // Var[e_t | e_{t+1}], Cov[e_t, e_t^2 | e_{t+1}] and Var[e_t^2 | e_{t+1}]
     // as polynomials in e_{t+1}
-    const double *V1, const double *C12, const double *V2 
+    const double *V1, const double *C12, const double *C13, const double *V2 
 )
 {
     p_add_scalar_mult(Cp1p2, p1[1] * p2[1], V1);
     p_add_scalar_mult(Cp1p2, p1[2] * p2[2], V2);
     p_add_scalar_mult(Cp1p2, p1[1] * p2[2] + p1[2] * p2[1], C12);
+    //p_add_scalar_mult(Cp1p2, p1[1] * p2[3] + p1[3] * p2[1], C13);
 }
 
 // print a polynomial (in a variable e) to the Matlab console
@@ -204,8 +205,8 @@ void compute_new_grad_Hess(
             dttp_sum += dt * dtp1;
             dt_sum += dt;
             dt2_sum += dt * dt;
-            p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t],  bddd[t]/6.0);
-            p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t],   bddd[t]/6.0);
+            p_set(E1,  mu0[t] - x0[t],  mud[t],         0.5*mudd[t],  bddd[t]/6.0);
+            p_set(b,   b0[t] - x0[t],   bd[t],          0.5*bdd[t],   bddd[t]/6.0);
 
             //S0 *= exp(sd[t]*b[0]/ad[t]);
             S20 = S0*S0;
@@ -224,8 +225,8 @@ void compute_new_grad_Hess(
         p_subtract(delta, E1, b);
 
         // Compute intermediate polynomial products
-        p_mult(delta_S, delta, S);
-        p_mult(b_delta_S, b, delta_S);
+        p_mult3(delta_S, delta, S);
+        p_mult3(b_delta_S, b, delta_S);
         p_square(E12, E1);
         p_square(delta2, delta);
 
@@ -303,7 +304,7 @@ void compute_new_grad_Hess(
             p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3);
             // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
             // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
-            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, V2);
+            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, C13, V2);
 
             // Add term for e_t e_{t+1} product in tridiagonal cases
             if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
