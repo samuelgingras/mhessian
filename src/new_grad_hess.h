@@ -9,16 +9,16 @@ typedef struct {
     double Q_ttp;
     double q_1;
     double q_t;
-    double m_tm1[3];
-    double m_t[3];
+    double m_tm1[4];
+    double m_t[4];
     double dQd;
     double qd;
 } Q_term;
 
 typedef struct {
     int i, j;
-    double c_tm1[3];
-    double c_t[3];
+    double c_tm1[4];
+    double c_t[4];
 } C_term;
 
 void compute_new_grad_Hess(
