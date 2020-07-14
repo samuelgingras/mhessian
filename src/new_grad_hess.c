@@ -72,8 +72,7 @@ static inline void p_square(double *p, const double *p1)
     p[0] = p1[0]*p1[0];
     p[1] = 2*p1[0]*p1[1];
     p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
-    p[3] = 0.0;
-//    p[3] = 2*p1[0]*p1[3] + 2*p1[1]*p1[2];
+    p[3] = 2*p1[0]*p1[3] + 2*p1[1]*p1[2];
 }
 
 // polynomial expectation operator
@@ -227,7 +226,7 @@ void compute_new_grad_Hess(
         // Compute intermediate polynomial products
         p_mult(delta_S, delta, S);
         p_mult(b_delta_S, b, delta_S);
-        p_square(E12, E1); E12[3] = 2*E1[1]*E1[2];
+        p_square(E12, E1);
         p_square(delta2, delta);
 
         // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
@@ -235,14 +234,13 @@ void compute_new_grad_Hess(
         p_add(E2, V1, E12);
 
         // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
-        p_mult(b_V1, b, V1);
+        p_mult3(b_V1, b, V1);
         p_set_scalar_mult(C12, 2.0, b_V1);
         p_add_scalar_mult(C12, 4.0, delta_S);
 
         p_mult3(E1_E12, E1, E12);
         p_set_scalar_mult(E3, 1.0, C12);
         p_add_scalar_mult(E3, 1.0, E1_E12);
-        //E3[3] = E1[1] * E2[2] + E1[2] * E2[1] + E1[0] * E2[3];
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
         p_mult(b2_V1, b, b_V1);
