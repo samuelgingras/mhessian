@@ -154,9 +154,9 @@ void compute_new_grad_Hess(
     double *sdd = mxStateGetPr(mxState,"sdd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[4], E2[4], E3[4], C12[4], V1[4], V2[4];
+    double E1[4], E2[4], E3[4], C12[4], C13[4], V1[4], V2[4];
     double b[4], delta[4], S[4], delta_S[4], delta2[4], S2[4], b_delta_S[4];
-    double E12[4], E1_E12[4], b_V1[4], b2_V1[4];
+    double E12[4], E1_E12[4], E1_E3[4], b_V1[4], b2_V1[4];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -243,10 +243,16 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(E3, 1.0, E1_E12);
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
-        p_mult(b2_V1, b, b_V1);
+        p_mult3(b2_V1, b, b_V1);
         p_set_scalar_mult(V2, 4.0, b2_V1);
         p_add_scalar_mult(V2, 8.0, b_delta_S);
         p_add_scalar_mult(V2, 2.0, S2);
+
+        // Computation of C13 = Cov[e_t, e_t^3|e_{t+1}]
+        p_square(C13, E2);
+        p_add_scalar_mult(C13, 1.0, V2);
+        p_mult3(E1_E3, E1, E3);
+        p_add_scalar_mult(C13, -1.0, E1_E3);
 
         if (t%1000 == 0) {
             poly_print("E1", E1);
@@ -257,6 +263,7 @@ void compute_new_grad_Hess(
             poly_print("E3", E3);
             poly_print("V2", V2);
             poly_print("C12", C12);
+            poly_print("C13", C13);
         }
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
@@ -307,11 +314,11 @@ void compute_new_grad_Hess(
                     V1_e += Qi->m_tm1[1] * Qj->Q_ttp;
                     C12_e += Qi->m_tm1[2] * Qj->Q_ttp;
                     Ci->c_t[2] += V1_e2 * V1[0];
-                    //Ci->c_t[3] += V1_e2 * V1[1];
+                    Ci->c_t[3] += V1_e2 * V1[1];
                 }
                 Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
                 Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
-                //Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
+                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
             }
             memcpy(Ci->c_tm1, Ci->c_t, 4 * sizeof(double));
         }
