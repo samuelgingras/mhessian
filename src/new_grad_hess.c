@@ -10,25 +10,16 @@
 //    p[0] + p[1] x + p[2] x^2.
 
 // polynomial assignment by element: p = (p0, p1, p2)
-static inline void p_set(double *p, double p0, double p1, double p2)
+static inline void p_set(double *p, double p0, double p1, double p2, double p3)
 {
-    p[0] = p0; p[1] = p1; p[2] = p2;
-}
-
-// polynomial change of variables: take a polynomial in e+c and change in place
-// to a polynomial in e, so that the result is the same function
-static inline void p_change_var(double *p, double c)
-{
-    double p2c = p[2] * c;
-    p[0] += (p2c + p[1]) * c;
-    p[1] += 2*p2c;
+    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3;
 }
 
 // polynomial assignment with scalar multiplication: p = c p1
 static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<3; i++)
+  for (i=0; i<4; i++)
     p[i] = c * p1[i];
 }
 
@@ -36,7 +27,7 @@ static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<3; i++)
+  for (i=0; i<4; i++)
     p[i] += c * p1[i];
 }
 
@@ -44,7 +35,7 @@ static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<3; i++)
+    for (i=0; i<4; i++)
         p[i] = p1[i] + p2[i];
 }
 
@@ -52,7 +43,7 @@ static inline void p_add(double *p, const double *p1, const double *p2)
 static inline void p_subtract(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<3; i++)
+    for (i=0; i<4; i++)
         p[i] = p1[i] - p2[i];
 }
 
@@ -63,6 +54,7 @@ static inline void p_mult(double *p, const double *p1, const double *p2)
     p[0] = p1[0]*p2[0];
     p[1] = p1[0]*p2[1] + p1[1]*p2[0];
     p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
+    p[3] = 0.0;
 }
 
 // polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
@@ -72,6 +64,7 @@ static inline void p_square(double *p, const double *p1)
     p[0] = p1[0]*p1[0];
     p[1] = 2*p1[0]*p1[1];
     p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
+    p[3] = 0.0;
 }
 
 // polynomial expectation operator
@@ -81,11 +74,12 @@ static inline void p_expect(
     // Input, a polynomial in e_t
     double *p,
     // E[e_t|e_{t+1}] and E[e_t^2|e_{t+1}], as polynomials in e_{t+1}
-    const double *E1, const double *E2
+    const double *E1, const double *E2, const double *E3
     )
 {
     p_set_scalar_mult(Ep, p[2], E2);
     p_add_scalar_mult(Ep, p[1], E1);
+    p_add_scalar_mult(Ep, p[3], E3);
     Ep[0] += p[0];
 }
 
@@ -108,15 +102,15 @@ static inline void p_cov(
 // print a polynomial (in a variable e) to the Matlab console
 static inline void poly_print(char *s, double *poly)
 {
-    mexPrintf("%s: %lf + %lf e + %lf e^2\n", s, poly[0], poly[1], poly[2]);
+    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3\n", s, poly[0], poly[1], poly[2], poly[3]);
 }
 
 static inline void Q_print(char *s, Q_term *Q)
 {
     mexPrintf("%s: Q_11 = %lf, Q_tt = %lf, Q_ttp = %lf, q_1 = %lf, q_t = %lf\n",
         s, Q->Q_11, Q->Q_tt, Q->Q_ttp, Q->q_1, Q->q_t);
-    mexPrintf("\tm_t = (%lf, %lf, %lf)\n", Q->m_t[0], Q->m_t[1], Q->m_t[2]);
-    mexPrintf("\tm_tm1 = (%lf, %lf, %lf)\n\n", Q->m_tm1[0], Q->m_tm1[1], Q->m_tm1[2]);
+    mexPrintf("\tm_t = (%lf, %lf, %lf, %lf)\n", Q->m_t[0], Q->m_t[1], Q->m_t[2], Q->m_t[3]);
+    mexPrintf("\tm_tm1 = (%lf, %lf, %lf, %lf)\n\n", Q->m_tm1[0], Q->m_tm1[1], Q->m_tm1[2], Q->m_tm1[3]);
 }
 
 static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
@@ -143,6 +137,7 @@ void compute_new_grad_Hess(
     double *b0 = mxStateGetPr(mxState,"b");     // Value,
     double *bd = mxStateGetPr(mxState,"bd");   // 1st derivative,
     double *bdd = mxStateGetPr(mxState,"bdd"); // and 2nd derivative, conditional mode
+    double *bddd = mxStateGetPr(mxState,"bddd"); // and 2nd derivative, conditional mode
     double *mu0 = mxStateGetPr(mxState,"mu");  // Same for conditional mean
     double *mud = mxStateGetPr(mxState,"mud");
     double *mudd = mxStateGetPr(mxState,"mudd");
@@ -151,9 +146,9 @@ void compute_new_grad_Hess(
     double *sdd = mxStateGetPr(mxState,"sdd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[3], E2[3], C12[3], V1[3], V2[3];
-    double b[3], delta[3], S[3], delta_S[3], delta2[3], S2[3], b_delta_S[3];
-    double E12[3], b_V1[3], b2_V1[3];
+    double E1[4], E2[4], E3[4], C12[4], V1[4], V2[4];
+    double b[4], delta[4], S[4], delta_S[4], delta2[4], S2[4], b_delta_S[4];
+    double E12[4], E1_E12[4], b_V1[4], b2_V1[4];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -201,20 +196,20 @@ void compute_new_grad_Hess(
             dttp_sum += dt * dtp1;
             dt_sum += dt;
             dt2_sum += dt * dt;
-            p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t]);
-            p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t]);
+            p_set(E1,  mu0[t] - x0[t],  mud[t],          0.5*mudd[t],  bddd[t]/6.0);
+            p_set(b,   b0[t] - x0[t],   bd[t],           0.5*bdd[t],   bddd[t]/6.0);
 
             //S0 *= exp(sd[t]*b[0]/ad[t]);
             S20 = S0*S0;
-            p_set(S,   S0,   S0*sd[t],     0.5*S0*sdd[t]);
-            p_set(S2,  S20,  2*S20*sd[t],  S20*sdd[t]);
+            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t], 0.0);
+            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t],    0.0);
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
-            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0);
-            p_set(b,   b0[t] - x0[t],   0.0,             0.0);
-            p_set(S,   S0,              0.0,             0.0);
-            p_set(S2,  S20,             0.0,             0.0);
+            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   0.0,             0.0, 0.0);
+            p_set(S,   S0,              0.0,             0.0, 0.0);
+            p_set(S2,  S20,             0.0,             0.0, 0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -223,7 +218,7 @@ void compute_new_grad_Hess(
         // Compute intermediate polynomial products
         p_mult(delta_S, delta, S);
         p_mult(b_delta_S, b, delta_S);
-        p_square(E12, E1);
+        p_square(E12, E1); E12[3] = 2*E1[1]*E1[2];
         p_square(delta2, delta);
 
         // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
@@ -235,6 +230,11 @@ void compute_new_grad_Hess(
         p_set_scalar_mult(C12, 2.0, b_V1);
         p_add_scalar_mult(C12, 4.0, delta_S);
 
+        p_mult(E1_E12, E1, E12);
+        p_set_scalar_mult(E3, 1.0, C12);
+        p_add_scalar_mult(E3, 1.0, E1_E12);
+        E3[3] = E1[1] * E2[2] + E1[2] * E2[1] + E1[0] * E2[3];
+
         // Computation of V2 = Var[e_t^2|e_{t+1}]
         p_mult(b2_V1, b, b_V1);
         p_set_scalar_mult(V2, 4.0, b2_V1);
@@ -243,12 +243,13 @@ void compute_new_grad_Hess(
 
         if (t%1000 == 0) {
             poly_print("E1", E1);
-        //    poly_print("b", b);
-        //    poly_print("S", S);
-        //    poly_print("V1", V1);
+            poly_print("b", b);
+            poly_print("S", S);
+            poly_print("V1", V1);
             poly_print("E2", E2);
-        //    poly_print("V2", V2);
-        //    poly_print("C12", C12);
+            poly_print("E3", E3);
+            poly_print("V2", V2);
+            poly_print("C12", C12);
         }
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
@@ -269,18 +270,14 @@ void compute_new_grad_Hess(
             }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
-            p_expect(Qi->m_t, Qi->m_tm1, E1, E2);
+            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
                 Qi->m_t[1] += Qi->Q_ttp * (dt + E1[0]);
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
+                Qi->m_t[3] += Qi->Q_ttp * E1[2];
             }
-        }
-
-        if (t%1000 == 0) {
-            Q_print("First quadratic", Q);
-            Q_print("First linear", Q+3);
         }
 
         // Compute c_t^{(i,j)}(e_{t+1}) polynomials
@@ -289,29 +286,31 @@ void compute_new_grad_Hess(
             Q_term *Qi = &(Q[Ci->i]), *Qj = &(Q[Ci->j]);
 
             // c_t^{(i,j)} = E[c_{t-1}^{i,j} | e_{t+1}] ...
-            p_expect(Ci->c_t, Ci->c_tm1, E1, E2);
+            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3);
             // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
             // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
             p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, V2);
 
             // Add term for e_t e_{t+1} product in tridiagonal cases
             if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
-                double V1_e = Qi->Q_ttp * Qj->m_tm1[1];
-                double C12_e = Qi->Q_ttp * Qj->m_tm1[2];
+                double V1_e = Qi->Q_ttp * Qj->m_tm1[1];    // Coeff of e_{t+1} var[e_t]
+                double C12_e = Qi->Q_ttp * Qj->m_tm1[2];   // Coeff of e_{t+1} cov[e_t, e_t^2]
                 if (iC < 3) { // Qj is a tridiagonal quadratic form
-                    double V1_e2 = Qi->Q_ttp * Qj->Q_ttp;
+                    double V1_e2 = Qi->Q_ttp * Qj->Q_ttp;  // Coeff of e_{t+1} var[e_t^2]
                     V1_e += Qi->m_tm1[1] * Qj->Q_ttp;
                     C12_e += Qi->m_tm1[2] * Qj->Q_ttp;
                     Ci->c_t[2] += V1_e2 * V1[0];
+                    //Ci->c_t[3] += V1_e2 * V1[1];
                 }
                 Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
                 Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
+                //Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
             }
-            memcpy(Ci->c_tm1, Ci->c_t, 3 * sizeof(double));
+            memcpy(Ci->c_tm1, Ci->c_t, 4 * sizeof(double));
         }
         dt = dtp1;
         for (iQ = 0; iQ < 5; iQ++)
-            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 3 * sizeof(double));
+            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 4 * sizeof(double));
     } // for(t=0; t<n-1; t++)
 
     // To avoid double counting
