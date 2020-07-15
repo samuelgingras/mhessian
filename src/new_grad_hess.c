@@ -163,7 +163,7 @@ void compute_new_grad_Hess(
     // Polynomials for conditional moments of e_t given e_{t+1}
     double E1[5], E2[5], E3[5], C12[5], C13[5], V1[5], V2[5];
     double b[5], delta[5], S[5], delta_S[5], delta2[5], S2[5], b_delta_S[5];
-    double E12[5], E1_E2[5], E1_E3[5], b_V1[5], b2_V1[5];
+    double E12[5], E1_E2[5], b_V1[5], b2_V1[5];
 
     double pm[5], pm2[5], pm3[5], pm4[5], pmS[5], pm2S[5], pE1[5], pE2[5], pE3[5], pE4[5];
     double pV1[5], pV2[5], pC12[5], pC13[5], zero[5];
@@ -258,12 +258,6 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(V2, 8.0, b_delta_S);
         p_add_scalar_mult(V2, 2.0, S2);
 
-        // Computation of C13 = Cov[e_t, e_t^3|e_{t+1}]
-        p_square(C13, E2);
-        p_add_scalar_mult(C13, 1.0, V2);
-        p_mult3(E1_E3, E1, E3);
-        p_add_scalar_mult(C13, -1.0, E1_E3);
-
         // New moment polynomials
         p_set_scalar_mult(pm, 1.0, E1);
         double m1_2 = pm[1] * pm[1];
@@ -330,7 +324,6 @@ void compute_new_grad_Hess(
             p_print("C12", C12);
             p_print("pC12", pC12);
 
-            p_print("C13", C13);
             p_print("pC13", pC13);
 
             p_print("pE4", pE4);
@@ -355,14 +348,14 @@ void compute_new_grad_Hess(
             }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
-            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3, pE4);
+            p_expect(Qi->m_t, Qi->m_tm1, E1, pE2, pE3, pE4);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
                 Qi->m_t[1] += Qi->Q_ttp * E1[0];
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
                 Qi->m_t[3] += Qi->Q_ttp * E1[2];
-                //Qi->m_t[4] += Qi->Q_ttp * E1[3];
+                Qi->m_t[4] += Qi->Q_ttp * E1[3];
             }
         }
 
