@@ -85,12 +85,13 @@ static inline void p_expect(
     // Input, a polynomial in e_t
     double *p,
     // E[e_t|e_{t+1}] and E[e_t^2|e_{t+1}], as polynomials in e_{t+1}
-    const double *E1, const double *E2, const double *E3
+    const double *E1, const double *E2, const double *E3, const double *E4
     )
 {
     p_set_scalar_mult(Ep, p[2], E2);
     p_add_scalar_mult(Ep, p[1], E1);
     p_add_scalar_mult(Ep, p[3], E3);
+    //p_add_scalar_mult(Ep, p[4], E4);
     Ep[0] += p[0];
 }
 
@@ -112,7 +113,7 @@ static inline void p_cov(
 }
 
 // print a polynomial (in a variable e) to the Matlab console
-static inline void poly_print(char *s, double *poly)
+static inline void p_print(char *s, double *poly)
 {
     mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3 + %lf e^4\n", s,
         poly[0], poly[1], poly[2], poly[3], poly[4]);
@@ -163,6 +164,9 @@ void compute_new_grad_Hess(
     double E1[5], E2[5], E3[5], C12[5], C13[5], V1[5], V2[5];
     double b[5], delta[5], S[5], delta_S[5], delta2[5], S2[5], b_delta_S[5];
     double E12[5], E1_E12[5], E1_E3[5], b_V1[5], b2_V1[5];
+
+    double pm[5], pm2[5], pm3[5], pm4[5], pmS[5], pm2S[5], pE1[5], pE2[5], pE3[5], pE4[5];
+    double pV1[5], pV2[5], pC12[5], pC13[5], zero[5];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -259,19 +263,82 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(C13, 1.0, V2);
         p_mult3(E1_E3, E1, E3);
         p_add_scalar_mult(C13, -1.0, E1_E3);
-        p_set(C13, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        // New moment polynomials
+        p_set_scalar_mult(pm, 1.0, E1);
+        double m1_2 = pm[1] * pm[1];
+        double m1_3 = pm[1] * m1_2;
+        double m1_4 = pm[1] * m1_3;
+        p_set(pm2, pm[0]*pm[0], 2*pm[0]*pm[1], m1_2+2*pm[0]*pm[2], 2*pm[1]*pm[2], 2*pm[1]*pm[3]);
+        p_set(pm3, 0.0, 3*pm[0]*pm[0]*pm[1] , 3*pm[0]*m1_2, m1_3, 3*m1_2*pm[2]);
+        p_set(pm4, 0.0, 0.0, 0.0, 4*pm[0]*m1_3, m1_4);
+        
+        p_set_scalar_mult(pmS, S[0], pm);
+        pmS[1] += pm[0] * S[1];
+        pmS[2] += pm[1] * S[1];
+        pmS[3] += pm[1] * S[2] + pm[2] * S[1];
+
+        p_set_scalar_mult(pm2S, S[0], pm2);
+        pm2S[1] += pm2[0] * S[1];
+        pm2S[2] += pm2[1] * S[1];
+        pm2S[3] += pm2[2] * S[1] + pm2[1] * S[2];
+
+        p_set_scalar_mult(pE1, 1.0, pm);
+        
+        p_set_scalar_mult(pE2, 1.0, pm2);
+        p_add_scalar_mult(pE2, 1.0, S);
+
+        p_set_scalar_mult(pE3, 1.0, pm3);
+        p_add_scalar_mult(pE3, 3.0, pmS);
+
+        p_set_scalar_mult(pE4, 1.0, pm4);
+        p_add_scalar_mult(pE4, 6.0, pm2S);
+        p_add_scalar_mult(pE4, 3.0, S2);
+
+        p_set_scalar_mult(pV1, 1.0, S);
+
+        p_set_scalar_mult(pC12, 2.0, pmS);
+
+        p_set_scalar_mult(pC13, 3.0, pm2S);
+        p_add_scalar_mult(pC13, 3.0, S2);
+
+        p_set_scalar_mult(pV2, 4.0, pm2S);
+        p_add_scalar_mult(pV2, 2.0, S2);
 
         if (t%1000 == 0) {
-            poly_print("E1", E1);
-            poly_print("b", b);
-            poly_print("S", S);
-            poly_print("V1", V1);
-            poly_print("E2", E2);
-            poly_print("E3", E3);
-            poly_print("V2", V2);
-            poly_print("C12", C12);
-            poly_print("C13", C13);
+            p_print("E1", E1);
+            p_print("pE1", pE1);
+            p_print("E12", E12);
+
+            p_print("pb2", pm2);
+            p_print("pb3", pm3);
+            p_print("pb4", pm4);
+            p_print("S", S);
+
+            p_print("V1", V1);
+            p_print("pV1", pV1);
+
+            p_print("E2", E2);
+            p_print("pE2", pE2);
+
+            p_print("E3", E3);
+            p_print("pE3", pE3);
+
+            p_print("V2", V2);
+            p_print("pV2", pV2);
+
+            p_print("C12", C12);
+            p_print("pC12", pC12);
+
+            p_print("C13", C13);
+            p_print("pC13", pC13);
+
+            p_print("pE4", pE4);
         }
+        p_set(C13, 0.0, 0.0, 0.0, 0.0, 0.0);
+        p_set(pC13, 0.0, 0.0, 0.0, 0.0, 0.0);
+        p_set(pE4, 0.0, 0.0, 0.0, 0.0, 0.0);
+        p_set(zero, 0.0, 0.0, 0.0, 0.0, 0.0);
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
         // in sequential procedure
@@ -291,13 +358,14 @@ void compute_new_grad_Hess(
             }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
-            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3);
+            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3, pE4);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
                 Qi->m_t[1] += Qi->Q_ttp * E1[0];
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
                 Qi->m_t[3] += Qi->Q_ttp * E1[2];
+                //Qi->m_t[4] += Qi->Q_ttp * E1[3];
             }
         }
 
@@ -307,10 +375,10 @@ void compute_new_grad_Hess(
             Q_term *Qi = &(Q[Ci->i]), *Qj = &(Q[Ci->j]);
 
             // c_t^{(i,j)} = E[c_{t-1}^{i,j} | e_{t+1}] ...
-            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3);
+            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3, pE4);
             // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
             // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
-            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, C13, V2);
+            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, zero, V2);
 
             // Add term for e_t e_{t+1} product in tridiagonal cases
             if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
@@ -324,17 +392,19 @@ void compute_new_grad_Hess(
                     C13_e += Qi->m_tm1[3] * Qj->Q_ttp;
                     Ci->c_t[2] += V1_e2 * V1[0];
                     Ci->c_t[3] += V1_e2 * V1[1];
+                    //Ci->c_t[4] += V1_e2 * V1[2];
                 }
-                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0] + C13_e * C13[0];
-                Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1] + C13_e * C13[1];
-                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2] + C13_e * C13[2];
+                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0] + C13_e * pC13[0];
+                Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1] + C13_e * pC13[1];
+                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2] + C13_e * pC13[2];
+                //Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3] + C13_e * C13[3];
             }
-            memcpy(Ci->c_tm1, Ci->c_t, 4 * sizeof(double));
+            memcpy(Ci->c_tm1, Ci->c_t, 5 * sizeof(double));
         }
         dtm1 = dt;
         dt = dtp1;
         for (iQ = 0; iQ < 5; iQ++)
-            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 4 * sizeof(double));
+            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 5 * sizeof(double));
     } // for(t=0; t<n-1; t++)
 
     // To avoid double counting
