@@ -10,16 +10,16 @@
 //    p[0] + p[1] x + p[2] x^2.
 
 // polynomial assignment by element: p = (p0, p1, p2)
-static inline void p_set(double *p, double p0, double p1, double p2, double p3)
+static inline void p_set(double *p, double p0, double p1, double p2, double p3, double p4)
 {
-    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3;
+    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3, p[4] = p4;
 }
 
 // polynomial assignment with scalar multiplication: p = c p1
 static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<4; i++)
+  for (i=0; i<5; i++)
     p[i] = c * p1[i];
 }
 
@@ -27,7 +27,7 @@ static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<4; i++)
+  for (i=0; i<5; i++)
     p[i] += c * p1[i];
 }
 
@@ -35,7 +35,7 @@ static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<4; i++)
+    for (i=0; i<5; i++)
         p[i] = p1[i] + p2[i];
 }
 
@@ -43,7 +43,7 @@ static inline void p_add(double *p, const double *p1, const double *p2)
 static inline void p_subtract(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<4; i++)
+    for (i=0; i<5; i++)
         p[i] = p1[i] - p2[i];
 }
 
@@ -55,6 +55,7 @@ static inline void p_mult(double *p, const double *p1, const double *p2)
     p[1] = p1[0]*p2[1] + p1[1]*p2[0];
     p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
     p[3] = 0.0;
+    p[4] = 0.0;
 }
 
 static inline void p_mult3(double *p, const double *p1, const double *p2)
@@ -63,6 +64,7 @@ static inline void p_mult3(double *p, const double *p1, const double *p2)
     p[1] = p1[0]*p2[1] + p1[1]*p2[0];
     p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
     p[3] = p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
+    p[4] = 0.0;
 }
 
 // polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
@@ -73,6 +75,7 @@ static inline void p_square(double *p, const double *p1)
     p[1] = 2*p1[0]*p1[1];
     p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
     p[3] = 2*p1[0]*p1[3] + 2*p1[1]*p1[2];
+    p[4] = 0.0;
 }
 
 // polynomial expectation operator
@@ -111,7 +114,8 @@ static inline void p_cov(
 // print a polynomial (in a variable e) to the Matlab console
 static inline void poly_print(char *s, double *poly)
 {
-    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3\n", s, poly[0], poly[1], poly[2], poly[3]);
+    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3 + %lf e^4\n", s,
+        poly[0], poly[1], poly[2], poly[3], poly[4]);
 }
 
 static inline void Q_print(char *s, Q_term *Q)
@@ -156,9 +160,9 @@ void compute_new_grad_Hess(
     double *sddd = mxStateGetPr(mxState,"sddd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[4], E2[4], E3[4], C12[4], C13[4], V1[4], V2[4];
-    double b[4], delta[4], S[4], delta_S[4], delta2[4], S2[4], b_delta_S[4];
-    double E12[4], E1_E12[4], E1_E3[4], b_V1[4], b2_V1[4];
+    double E1[5], E2[5], E3[5], C12[5], C13[5], V1[5], V2[5];
+    double b[5], delta[5], S[5], delta_S[5], delta2[5], S2[5], b_delta_S[5];
+    double E12[5], E1_E12[5], E1_E3[5], b_V1[5], b2_V1[5];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -206,20 +210,20 @@ void compute_new_grad_Hess(
             dttp_sum += dt * dtp1;
             dt_sum += dt;
             dt2_sum += dt * dt;
-            p_set(E1,  mu0[t] - x0[t],  mud[t],         0.5*mudd[t],  bddd[t]/6.0);
-            p_set(b,   b0[t] - x0[t],   bd[t],          0.5*bdd[t],   bddd[t]/6.0);
+            p_set(E1,  mu0[t] - x0[t],  mud[t],         0.5*mudd[t],  bddd[t]/6.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   bd[t],          0.5*bdd[t],   bddd[t]/6.0, 0.0);
 
             //S0 *= exp(sd[t]*b[0]/ad[t]);
             S20 = S0*S0;
-            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t], S0*sddd[t]/6.0);
-            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t],    S20*sddd[t]/3.0);
+            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t], S0*sddd[t]/6.0, 0.0);
+            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t],    S20*sddd[t]/3.0, 0.0);
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
-            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0, 0.0);
-            p_set(b,   b0[t] - x0[t],   0.0,             0.0, 0.0);
-            p_set(S,   S0,              0.0,             0.0, 0.0);
-            p_set(S2,  S20,             0.0,             0.0, 0.0);
+            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0, 0.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   0.0,             0.0, 0.0, 0.0);
+            p_set(S,   S0,              0.0,             0.0, 0.0, 0.0);
+            p_set(S2,  S20,             0.0,             0.0, 0.0, 0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -255,7 +259,7 @@ void compute_new_grad_Hess(
         p_add_scalar_mult(C13, 1.0, V2);
         p_mult3(E1_E3, E1, E3);
         p_add_scalar_mult(C13, -1.0, E1_E3);
-        p_set(C13, 0.0, 0.0, 0.0, 0.0);
+        p_set(C13, 0.0, 0.0, 0.0, 0.0, 0.0);
 
         if (t%1000 == 0) {
             poly_print("E1", E1);
