@@ -349,7 +349,7 @@ void compute_new_grad_Hess(
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
     var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
     var[4] = 0.25 * omega * omega * C[2].c_t[0];
-    var[2] = var[6] = 0.5 * omega * omega * C[3].c_t[0];
-    var[5] = var[7]= 0.5 * omega * omega * C[4].c_t[0];
+    var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
+    var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
     var[8] = omega * omega * C[5].c_t[0];
 } // void compute_grad_Hess(...)
