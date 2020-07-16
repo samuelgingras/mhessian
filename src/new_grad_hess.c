@@ -47,24 +47,13 @@ static inline void p_subtract(double *p, const double *p1, const double *p2)
         p[i] = p1[i] - p2[i];
 }
 
-// polynomial multiplication: p = p1 * p2
-// note that 3rd and 4th order terms in result are dropped
 static inline void p_mult(double *p, const double *p1, const double *p2)
 {
     p[0] = p1[0]*p2[0];
     p[1] = p1[0]*p2[1] + p1[1]*p2[0];
     p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
-    p[3] = 0.0;
-    p[4] = 0.0;
-}
-
-static inline void p_mult3(double *p, const double *p1, const double *p2)
-{
-    p[0] = p1[0]*p2[0];
-    p[1] = p1[0]*p2[1] + p1[1]*p2[0];
-    p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
     p[3] = p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
-    p[4] = 0.0;
+    p[4] = p1[0]*p2[4] + p1[1]*p2[3] + p1[2]*p2[2] + p1[3]*p2[1] + p1[4]*p2[0];
 }
 
 // polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
@@ -103,13 +92,12 @@ static inline void p_cov(
     const double *p1, const double *p2,
     // Var[e_t | e_{t+1}], Cov[e_t, e_t^2 | e_{t+1}] and Var[e_t^2 | e_{t+1}]
     // as polynomials in e_{t+1}
-    const double *V1, const double *C12, const double *C13, const double *V2 
+    const double *V1, const double *C12, const double *V2 
 )
 {
     p_add_scalar_mult(Cp1p2, p1[1] * p2[1], V1);
     p_add_scalar_mult(Cp1p2, p1[2] * p2[2], V2);
     p_add_scalar_mult(Cp1p2, p1[1] * p2[2] + p1[2] * p2[1], C12);
-    p_add_scalar_mult(Cp1p2, p1[1] * p2[3] + p1[3] * p2[1], C13);
 }
 
 // print a polynomial (in a variable e) to the Matlab console
@@ -161,12 +149,10 @@ void compute_new_grad_Hess(
     double *sddd = mxStateGetPr(mxState,"sddd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[5], E2[5], E3[5], C12[5], C13[5], V1[5], V2[5];
+    double E1[5], E2[5], E3[5], E4[5], C12[5], V1[5], V2[5];
     double b[5], delta[5], S[5], delta_S[5], delta2[5], S2[5], b_delta_S[5];
     double E12[5], E1_E2[5], b_V1[5], b2_V1[5];
-
-    double pm[5], pm2[5], pm3[5], pm4[5], pmS[5], pm2S[5], pE1[5], pE2[5], pE3[5], pE4[5];
-    double pV1[5], pV2[5], pC12[5], zero[5];
+    double zero[5] = {0.0};
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -233,9 +219,9 @@ void compute_new_grad_Hess(
         p_subtract(delta, E1, b);
 
         // Compute intermediate polynomial products
-        p_mult3(delta_S, delta, S);
-        p_mult3(b_delta_S, b, delta_S);
-        p_square(E12, E1); E12[4] = 0.0;
+        p_mult(delta_S, delta, S);
+        p_mult(b_delta_S, b, delta_S);
+        p_square(E12, E1);
         p_square(delta2, delta);
 
         // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
@@ -243,90 +229,26 @@ void compute_new_grad_Hess(
         p_add(E2, V1, E12);
 
         // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
-        p_mult3(b_V1, b, V1);
+        p_mult(b_V1, b, V1);
         p_set_scalar_mult(C12, 2.0, b_V1);
         p_add_scalar_mult(C12, 4.0, delta_S);
 
-        p_mult3(E1_E2, E1, E2);
+        p_mult(E1_E2, E1, E2);
         p_set_scalar_mult(E3, 1.0, C12);
         p_add_scalar_mult(E3, 1.0, E1_E2);
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
-        p_mult3(b2_V1, b, b_V1);
+        p_mult(b2_V1, b, b_V1);
         p_set_scalar_mult(V2, 4.0, b2_V1);
         p_add_scalar_mult(V2, 8.0, b_delta_S);
         p_add_scalar_mult(V2, 2.0, S2);
 
-        // New moment polynomials
-        p_set_scalar_mult(pm, 1.0, E1);
-        double m1_2 = pm[1] * pm[1];
-        double m1_3 = pm[1] * m1_2;
-        double m1_4 = pm[1] * m1_3;
-        p_set(pm2, pm[0]*pm[0], 2*pm[0]*pm[1], m1_2+2*pm[0]*pm[2], 2*pm[1]*pm[2], 2*pm[1]*pm[3]);
-        p_set(pm3, 0.0, 3*pm[0]*pm[0]*pm[1] , 3*pm[0]*m1_2, m1_3, 3*m1_2*pm[2]);
-        p_set(pm4, 0.0, 0.0, 0.0, 4*pm[0]*m1_3, m1_4);
-        
-        p_set_scalar_mult(pmS, S[0], pm);
-        pmS[1] += pm[0] * S[1];
-        pmS[2] += pm[1] * S[1];
-        pmS[3] += pm[1] * S[2] + pm[2] * S[1];
-        pmS[4] += pm[2] * S[2] + pm[3] * S[1] + pm[1] * S[3];
-
-        p_set_scalar_mult(pm2S, S[0], pm2);
-        pm2S[1] += pm2[0] * S[1];
-        pm2S[2] += pm2[1] * S[1];
-        pm2S[3] += pm2[2] * S[1] + pm2[1] * S[2];
-
-        p_set_scalar_mult(pE1, 1.0, pm);
-        
-        p_set_scalar_mult(pE2, 1.0, pm2);
-        p_add_scalar_mult(pE2, 1.0, S);
-
-        p_set_scalar_mult(pE3, 1.0, pm3);
-        p_add_scalar_mult(pE3, 3.0, pmS);
-
-        p_set_scalar_mult(pE4, 1.0, pm4);
-        p_add_scalar_mult(pE4, 6.0, pm2S);
-        p_add_scalar_mult(pE4, 3.0, S2);
-
-        p_set_scalar_mult(pV1, 1.0, S);
-
-        p_set_scalar_mult(pC12, 2.0, pmS);
-
-        p_set_scalar_mult(pV2, 4.0, pm2S);
-        p_add_scalar_mult(pV2, 2.0, S2);
-
-        if (t%1000 == 0) {
-            p_print("E1", E1);
-            p_print("pE1", pE1);
-            p_print("E12", E12);
-
-            p_print("pb2", pm2);
-            p_print("pb3", pm3);
-            p_print("pb4", pm4);
-            p_print("S", S);
-
-            p_print("V1", V1);
-            p_print("pV1", pV1);
-
-            p_print("E2", E2);
-            p_print("pE2", pE2);
-
-            p_print("E3", E3);
-            p_print("pE3", pE3);
-
-            p_print("V2", V2);
-            p_print("pV2", pV2);
-
-            p_print("C12", C12);
-            p_print("pC12", pC12);
-
-            p_print("pE4", pE4);
-
-            Q_print("First quadratic", Q);
-            Q_print("First linear", Q+3);
+        // Computation of E4 = V2 + E2^2
+        p_square(E4, E2);
+        p_add(E4, E4, V2);
+        if ((t % 1000) == 0) {
+            p_print("E4", E4);
         }
-        p_set(zero, 0.0, 0.0, 0.0, 0.0, 0.0);
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
         // in sequential procedure
@@ -346,7 +268,7 @@ void compute_new_grad_Hess(
             }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
-            p_expect(Qi->m_t, Qi->m_tm1, E1, pE2, pE3, pE4);
+            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3, E4);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
@@ -366,7 +288,7 @@ void compute_new_grad_Hess(
             p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3, zero); // pE4 for zero
             // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
             // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
-            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, zero, V2); // C13 for zero
+            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, V2);
 
             // Add term for e_t e_{t+1} product in tridiagonal cases
             if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
