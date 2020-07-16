@@ -77,8 +77,8 @@ static inline void p_expect(
     const double *E1, const double *E2, const double *E3, const double *E4
     )
 {
-    p_set_scalar_mult(Ep, p[2], E2);
-    p_add_scalar_mult(Ep, p[1], E1);
+    p_set_scalar_mult(Ep, p[1], E1);
+    p_add_scalar_mult(Ep, p[2], E2);
     p_add_scalar_mult(Ep, p[3], E3);
     p_add_scalar_mult(Ep, p[4], E4);
     Ep[0] += p[0];
@@ -101,13 +101,14 @@ static inline void p_cov(
 }
 
 // print a polynomial (in a variable e) to the Matlab console
-static inline void p_print(char *s, double *poly)
+static void p_print(char *s, double *poly)
 {
     mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3 + %lf e^4\n", s,
         poly[0], poly[1], poly[2], poly[3], poly[4]);
 }
 
-static inline void Q_print(char *s, Q_term *Q)
+// print m_t and m_tm1 polynomials for a given quadratic or linear form
+static void Q_print(char *s, Q_term *Q)
 {
     mexPrintf("%s: Q_11 = %lf, Q_tt = %lf, Q_ttp = %lf, q_1 = %lf, q_t = %lf\n",
         s, Q->Q_11, Q->Q_tt, Q->Q_ttp, Q->q_1, Q->q_t);
@@ -209,10 +210,10 @@ void compute_new_grad_Hess(
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
-            p_set(E1,  mu0[t] - x0[t],  0.0,             0.0, 0.0, 0.0);
-            p_set(b,   b0[t] - x0[t],   0.0,             0.0, 0.0, 0.0);
-            p_set(S,   S0,              0.0,             0.0, 0.0, 0.0);
-            p_set(S2,  S20,             0.0,             0.0, 0.0, 0.0);
+            p_set(E1,  mu0[t] - x0[t],  0.0, 0.0, 0.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   0.0, 0.0, 0.0, 0.0);
+            p_set(S,   S0,              0.0, 0.0, 0.0, 0.0);
+            p_set(S2,  S20,             0.0, 0.0, 0.0, 0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -222,10 +223,11 @@ void compute_new_grad_Hess(
         p_mult(delta_S, delta, S);
         p_mult(b_delta_S, b, delta_S);
         p_square(E12, E1);
-        p_square(delta2, delta);
+        //p_square(delta2, delta);
 
         // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
-        p_subtract(V1, S, delta2);
+        //p_subtract(V1, S, delta2);
+        p_set_scalar_mult(V1, 1.0, S);
         p_add(E2, V1, E12);
 
         // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
@@ -246,9 +248,6 @@ void compute_new_grad_Hess(
         // Computation of E4 = V2 + E2^2
         p_square(E4, E2);
         p_add(E4, E4, V2);
-        if ((t % 1000) == 0) {
-            p_print("E4", E4);
-        }
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
         // in sequential procedure
@@ -268,7 +267,7 @@ void compute_new_grad_Hess(
             }
             else
                 Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
-            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3, E4);
+            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3, zero);
 
             // Add term for e_t e_{t+1} product for tridiagonal cases
             if (iQ < 3 && t<n-1) {
@@ -285,7 +284,7 @@ void compute_new_grad_Hess(
             Q_term *Qi = &(Q[Ci->i]), *Qj = &(Q[Ci->j]);
 
             // c_t^{(i,j)} = E[c_{t-1}^{i,j} | e_{t+1}] ...
-            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3, zero); // pE4 for zero
+            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3, zero); // E4 for zero
             // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
             // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
             p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, V2);
@@ -302,7 +301,7 @@ void compute_new_grad_Hess(
                     Ci->c_t[3] += V1_e2 * V1[1];
                     Ci->c_t[4] += V1_e2 * V1[2];
                 }
-                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];  // C13 for zero
+                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
                 Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
                 Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
                 Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3];
@@ -337,12 +336,6 @@ void compute_new_grad_Hess(
     grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
     grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
     grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
-
-    mexPrintf("Q[0].dQd: %lf, Q[0].m_t[0]: %lf\n", Q[0].dQd, Q[0].m_t[0]);
-    mexPrintf("Q[1].dQd: %lf, Q[1].m_t[0]: %lf\n", Q[1].dQd, Q[1].m_t[0]);
-    mexPrintf("Q[2].dQd: %lf, Q[2].m_t[0]: %lf\n", Q[2].dQd, Q[2].m_t[0]);
-    mexPrintf("Q[3].qd: %lf, Q[3].m_t[0]: %lf\n", Q[3].qd, Q[3].m_t[0]);
-    mexPrintf("Q[4].qd: %lf, Q[4].m_t[0]: %lf\n", Q[4].qd, Q[4].m_t[0]);
 
     // Assign elements of expected Hessian
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
