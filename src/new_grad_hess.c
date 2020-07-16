@@ -166,7 +166,7 @@ void compute_new_grad_Hess(
     double E12[5], E1_E2[5], b_V1[5], b2_V1[5];
 
     double pm[5], pm2[5], pm3[5], pm4[5], pmS[5], pm2S[5], pE1[5], pE2[5], pE3[5], pE4[5];
-    double pV1[5], pV2[5], pC12[5], pC13[5], zero[5];
+    double pV1[5], pV2[5], pC12[5], zero[5];
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -208,7 +208,6 @@ void compute_new_grad_Hess(
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
         double S0 = Sigma[t], S20;
-        double bd_ad = bd[t]/ad[t];
         if (t<n-1) {
             dtp1 = x0[t+1] - mu[t+1];
             dttp_sum += dt * dtp1;
@@ -217,7 +216,7 @@ void compute_new_grad_Hess(
             p_set(E1,  mu0[t] - x0[t],  mud[t],         0.5*mudd[t],  bddd[t]/6.0, 0.0);
             p_set(b,   b0[t] - x0[t],   bd[t],          0.5*bdd[t],   bddd[t]/6.0, 0.0);
 
-            //S0 *= exp(sd[t]*b[0]/ad[t]);
+            S0 *= exp(sd[t]*b[0]/ad[t]);
             S20 = S0*S0;
             p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t], S0*sddd[t]/6.0, 0.0);
             p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t],    S20*sddd[t]/3.0, 0.0);
@@ -271,6 +270,7 @@ void compute_new_grad_Hess(
         pmS[1] += pm[0] * S[1];
         pmS[2] += pm[1] * S[1];
         pmS[3] += pm[1] * S[2] + pm[2] * S[1];
+        pmS[4] += pm[2] * S[2] + pm[3] * S[1] + pm[1] * S[3];
 
         p_set_scalar_mult(pm2S, S[0], pm2);
         pm2S[1] += pm2[0] * S[1];
@@ -292,9 +292,6 @@ void compute_new_grad_Hess(
         p_set_scalar_mult(pV1, 1.0, S);
 
         p_set_scalar_mult(pC12, 2.0, pmS);
-
-        p_set_scalar_mult(pC13, 3.0, pm2S);
-        p_add_scalar_mult(pC13, 3.0, S2);
 
         p_set_scalar_mult(pV2, 4.0, pm2S);
         p_add_scalar_mult(pV2, 2.0, S2);
@@ -324,9 +321,10 @@ void compute_new_grad_Hess(
             p_print("C12", C12);
             p_print("pC12", pC12);
 
-            p_print("pC13", pC13);
-
             p_print("pE4", pE4);
+
+            Q_print("First quadratic", Q);
+            Q_print("First linear", Q+3);
         }
         p_set(zero, 0.0, 0.0, 0.0, 0.0, 0.0);
 
@@ -374,20 +372,18 @@ void compute_new_grad_Hess(
             if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
                 double V1_e = Qi->Q_ttp * Qj->m_tm1[1];    // Coeff of e_{t+1} var[e_t]
                 double C12_e = Qi->Q_ttp * Qj->m_tm1[2];   // Coeff of e_{t+1} cov[e_t, e_t^2]
-                double C13_e = Qi->Q_ttp * Qj->m_tm1[3];   // Coeff of e_{t+1} cov[e_t, e_t^3]
                 if (iC < 3) { // Qj is a tridiagonal quadratic form
                     double V1_e2 = Qi->Q_ttp * Qj->Q_ttp;  // Coeff of e_{t+1} var[e_t^2]
                     V1_e += Qi->m_tm1[1] * Qj->Q_ttp;
                     C12_e += Qi->m_tm1[2] * Qj->Q_ttp;
-                    C13_e += Qi->m_tm1[3] * Qj->Q_ttp;
                     Ci->c_t[2] += V1_e2 * V1[0];
                     Ci->c_t[3] += V1_e2 * V1[1];
                     Ci->c_t[4] += V1_e2 * V1[2];
                 }
-                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0] + C13_e * zero[0];  // C13 for zero
-                Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1] + C13_e * zero[1];
-                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2] + C13_e * zero[2];
-                Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3] + C13_e * zero[3];
+                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];  // C13 for zero
+                Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
+                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
+                Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3];
             }
             memcpy(Ci->c_tm1, Ci->c_t, 5 * sizeof(double));
         }
@@ -420,7 +416,11 @@ void compute_new_grad_Hess(
     grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
     grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
 
+    mexPrintf("Q[0].dQd: %lf, Q[0].m_t[0]: %lf\n", Q[0].dQd, Q[0].m_t[0]);
+    mexPrintf("Q[1].dQd: %lf, Q[1].m_t[0]: %lf\n", Q[1].dQd, Q[1].m_t[0]);
     mexPrintf("Q[2].dQd: %lf, Q[2].m_t[0]: %lf\n", Q[2].dQd, Q[2].m_t[0]);
+    mexPrintf("Q[3].qd: %lf, Q[3].m_t[0]: %lf\n", Q[3].qd, Q[3].m_t[0]);
+    mexPrintf("Q[4].qd: %lf, Q[4].m_t[0]: %lf\n", Q[4].qd, Q[4].m_t[0]);
 
     // Assign elements of expected Hessian
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
