@@ -3,13 +3,13 @@
 #include "mex.h"
 #include "new_grad_hess.h"
 
-// The following functions are utilities for operations on 2nd order polynomials.
-// They give 2nd order polynomial results; any higher order terms are dropped.
-// The vector (p[0], p[1], p[2]) represents the polynomial
+// The following functions are utilities for operations on 4th order polynomials.
+// They give 4th order polynomial results; any higher order terms are dropped.
+// The vector (p[0], p[1], p[2], p[3], p[4]) represents the polynomial
 //
-//    p[0] + p[1] x + p[2] x^2.
+//    p[0] + p[1] x + p[2] x^2 + p[3] x^3 + p[4] x^4.
 
-// polynomial assignment by element: p = (p0, p1, p2)
+// polynomial assignment by element: p = (p0, p1, p2, p3, p4s)
 static inline void p_set(double *p, double p0, double p1, double p2, double p3, double p4)
 {
     p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3, p[4] = p4;
@@ -19,7 +19,7 @@ static inline void p_set(double *p, double p0, double p1, double p2, double p3, 
 static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<5; i++)
+  for (i=0; i<p_len; i++)
     p[i] = c * p1[i];
 }
 
@@ -27,7 +27,7 @@ static inline void p_set_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 {
   int i;
-  for (i=0; i<5; i++)
+  for (i=0; i<p_len; i++)
     p[i] += c * p1[i];
 }
 
@@ -35,7 +35,7 @@ static inline void p_add_scalar_mult(double *p, double c, const double *p1)
 static inline void p_add(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<5; i++)
+    for (i=0; i<p_len; i++)
         p[i] = p1[i] + p2[i];
 }
 
@@ -43,7 +43,7 @@ static inline void p_add(double *p, const double *p1, const double *p2)
 static inline void p_subtract(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<5; i++)
+    for (i=0; i<p_len; i++)
         p[i] = p1[i] - p2[i];
 }
 
@@ -124,7 +124,10 @@ static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
 
 void compute_new_grad_Hess(
     const mxArray *mxState,
-    int n,
+    // long_th = FALSE for theta = (ln(omega), atanh(phi))),
+    //           TRUE for theta = (ln(omega), atanh(phi)), mu)
+    int long_th,
+    int n,        // Number of observations
     double *mu,   // Prior mean of x, as a vector
     double phi,   // Autocorrelation parameter of x_t of x_t process
     double omega, // Innovation precision parameter of x_t process
@@ -150,10 +153,13 @@ void compute_new_grad_Hess(
     double *sddd = mxStateGetPr(mxState,"sddd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[5], E2[5], E3[5], E4[5], C12[5], V1[5], V2[5];
-    double b[5], delta[5], S[5], delta_S[5], delta2[5], S2[5], b_delta_S[5];
-    double E12[5], E1_E2[5], b_V1[5], b2_V1[5];
-    double zero[5] = {0.0};
+    double E1[p_len], E2[p_len], E3[p_len], E4[p_len], C12[p_len], V1[p_len], V2[p_len];
+    double b[p_len], delta[p_len], S[p_len], delta_S[p_len], delta2[p_len], S2[p_len], b_delta_S[p_len];
+    double E12[p_len], E1_E2[p_len], b_V1[p_len], b2_V1[p_len];
+    double zero[p_len] = {0.0};
+
+    int nQ = long_th ? 5 : 3;
+    int nC = long_th ? 6 : 3;
 
     // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
     // and vectors q and q_2.
@@ -254,7 +260,7 @@ void compute_new_grad_Hess(
         // -----------------------------------------------------------------------
 
         // Compute m_t^{(i)}(e_{t+1}) for quadratic forms
-        for (iQ = 0; iQ < 5; iQ++) {
+        for (iQ = 0; iQ < nQ; iQ++) {
             Q_term *Qi = &(Q[iQ]);
 
             // Add terms for e_t and e_t^2 in z^{(i)}(e_t, e_{t+1}) to
@@ -279,7 +285,7 @@ void compute_new_grad_Hess(
         }
 
         // Compute c_t^{(i,j)}(e_{t+1}) polynomials
-        for (iC = 0; iC < 6; iC++) {
+        for (iC = 0; iC < nC; iC++) {
             C_term *Ci = &(C[iC]);
             Q_term *Qi = &(Q[Ci->i]), *Qj = &(Q[Ci->j]);
 
@@ -306,50 +312,61 @@ void compute_new_grad_Hess(
                 Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
                 Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3];
             }
-            memcpy(Ci->c_tm1, Ci->c_t, 5 * sizeof(double));
+            memcpy(Ci->c_tm1, Ci->c_t, p_len * sizeof(double));
         }
         dtm1 = dt;
         dt = dtp1;
-        for (iQ = 0; iQ < 5; iQ++)
-            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, 5 * sizeof(double));
+        for (iQ = 0; iQ < nQ; iQ++)
+            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, p_len * sizeof(double));
     } // for(t=0; t<n-1; t++)
 
     // To avoid double counting
     dt_sum -= d1;
     dt2_sum -= d1 * d1;
-    for (iQ=0; iQ<3; iQ++) {
+    for (iQ = 0; iQ < 3; iQ++) {
         // Compute constant part of quadratic forms
         Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
         Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum + Q[iQ].Q_ttp * dttp_sum;
     }
     // ... and linear forms.
-    for (iQ=3; iQ<5; iQ++) {
+    for (iQ=3; iQ<nQ; iQ++) {
         Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
     }
 
-    // Flat indices for a 3 x 3 matrix
-    // 0 1 2
-    // 3 4 5
+    // Flat indices for a 3 x 3 matrix, 2 x 2 matrix
+    // 0 1 2   0 1
+    // 3 4 5   2 3
     // 6 7 8
 
     // Assign elements of expected gradient
     grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
     grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
-    grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
+    if (long_th) {
+        grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
+    }
 
-    // Assign elements of expected Hessian
+    // Assign elements of expected Hessian "Hess" and variance of gradient "var"
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
-    Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
-    Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
-    Hess[2] = Hess[6] = omega * (Q[3].qd + Q[3].m_t[0]);
-    Hess[5] = Hess[7] = omega * (Q[4].qd + Q[4].m_t[0]);
-    Hess[8] = -omega * (1-phi) * (n * (1-phi) + 2*phi);
-
-    // Assign elements of variance of gradient
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
-    var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
-    var[4] = 0.25 * omega * omega * C[2].c_t[0];
-    var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
-    var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
-    var[8] = omega * omega * C[5].c_t[0];
+    if (long_th) {
+        Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+        Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
+        Hess[2] = Hess[6] = omega * (Q[3].qd + Q[3].m_t[0]);
+        Hess[5] = Hess[7] = omega * (Q[4].qd + Q[4].m_t[0]);
+        Hess[8] = -omega * (1-phi) * (n * (1-phi) + 2*phi);
+
+        var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
+        var[4] = 0.25 * omega * omega * C[2].c_t[0];
+        var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
+        var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
+        var[8] = omega * omega * C[5].c_t[0];
+    }
+    else {
+        Hess[1] = Hess[2] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+        Hess[3] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
+
+        var[1] = var[2] = 0.25 * omega * omega * C[1].c_t[0];
+        var[3] = 0.25 * omega * omega * C[2].c_t[0];
+    }
+
 } // void compute_grad_Hess(...)

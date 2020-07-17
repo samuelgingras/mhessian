@@ -12,7 +12,7 @@ void ErrMsgTxt(bool assertion, const char *text)
 void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[])
 {
     // Check number of input/output argument
-    ErrMsgTxt( nrhs == 2,
+    ErrMsgTxt( nrhs == 3,
     "Invalid inputs: Three input arguments expected");
     
     ErrMsgTxt( nlhs == 3,
@@ -87,16 +87,19 @@ void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[
             mu[i] = d[i] + mu[i] - phi * d[i-1];
     }
     
+    double *p_long_th = mxGetPr(prhs[2]);
+    int long_th = p_long_th[0] != 0;
+    int dim_th = long_th ? 3 : 2;
+
     // Prepare output arguments
-    plhs[0] = mxCreateDoubleMatrix(3,1,mxREAL);
-    plhs[1] = mxCreateDoubleMatrix(3,3,mxREAL);
-    plhs[2] = mxCreateDoubleMatrix(3,3,mxREAL);
+    plhs[0] = mxCreateDoubleMatrix(dim_th, 1, mxREAL);
+    plhs[1] = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
+    plhs[2] = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
     
     // Set pointers
     double *grad = mxGetPr(plhs[0]);
     double *Hess = mxGetPr(plhs[1]);
     double *var = mxGetPr(plhs[2]);
     
-    
-    compute_new_grad_Hess(prhs[1], n, mu, phi, omega, grad, Hess, var);
+    compute_new_grad_Hess(prhs[1], long_th, n, mu, phi, omega, grad, Hess, var);
 }
