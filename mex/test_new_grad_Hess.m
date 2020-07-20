@@ -17,7 +17,9 @@ theta.omega = omega;
 [hmout, state] = hessianMethod(model, y, theta);
 
 %[g, H, V] = grad_hess_approx(theta, state, u);
-[gnew, Hnew, Vnew] = new_grad_hess_approx(theta, state, 1);
+for m=1:10000
+  [gnew, Hnew, Vnew] = new_grad_hess_approx(theta, state, 1);
+end
 gnew
 Vnew
 Hnew + Vnew

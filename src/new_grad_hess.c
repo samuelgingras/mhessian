@@ -47,24 +47,24 @@ static inline void p_subtract(double *p, const double *p1, const double *p2)
         p[i] = p1[i] - p2[i];
 }
 
-static inline void p_mult(double *p, const double *p1, const double *p2)
+static inline void p_mult_add(double *p, const double *p1, const double *p2)
 {
-    p[0] = p1[0]*p2[0];
-    p[1] = p1[0]*p2[1] + p1[1]*p2[0];
-    p[2] = p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
-    p[3] = p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
-    p[4] = p1[0]*p2[4] + p1[1]*p2[3] + p1[2]*p2[2] + p1[3]*p2[1] + p1[4]*p2[0];
+    p[0] += p1[0]*p2[0];
+    p[1] += p1[0]*p2[1] + p1[1]*p2[0];
+    p[2] += p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
+    p[3] += p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
+    p[4] += p1[0]*p2[4] + p1[1]*p2[3] + p1[2]*p2[2] + p1[3]*p2[1] + p1[4]*p2[0];
 }
 
 // polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
-// again, 3rd and 4th order terms in result are dropped
-static inline void p_square(double *p, const double *p1)
+// p1 is a 3rd order polynomial and higher orders than x^4 are dropped.
+static inline void p_square3(double *p, const double *p1)
 {
     p[0] = p1[0]*p1[0];
     p[1] = 2*p1[0]*p1[1];
     p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
     p[3] = 2*p1[0]*p1[3] + 2*p1[1]*p1[2];
-    p[4] = p1[2]*p1[2] + 2*p1[1]*p1[3] + 2*p1[0]*p1[4];
+    p[4] = p1[2]*p1[2] + 2*p1[1]*p1[3];
 }
 
 // polynomial expectation operator
@@ -152,10 +152,9 @@ void compute_new_grad_Hess(
     double *sddd = mxStateGetPr(mxState,"sddd"); // 2nd derivative of log(Sigma)
 
     // Polynomials for conditional moments of e_t given e_{t+1}
-    double E1[p_len], E2[p_len], E3[p_len], C12[p_len], V1[p_len], V2[p_len];
-    double b[p_len], delta[p_len], S[p_len], delta_S[p_len], delta2[p_len], S2[p_len], b_delta_S[p_len];
-    double E12[p_len], E1_E2[p_len], b_V1[p_len], b2_V1[p_len];
-    double zero[p_len] = {0.0};
+    double b[p_len] = {0}, delta[p_len] = {0}, S[p_len] = {0};   // Given
+    double b_2[p_len], S2[p_len], E12[p_len];  // Intermediate polynomials
+    double E1[p_len], E2[p_len], E3[p_len], C12[p_len], V1[p_len], V2[p_len]; // Direct moments
 
     int nQ = long_th ? 5 : 3;
     int nC = long_th ? 6 : 3;
@@ -200,18 +199,26 @@ void compute_new_grad_Hess(
         //   (x_{t+1} - x_{t+1}^\circ)
         // E1 and b give conditional mean and mode of x_t given x_{t+1}
         double S0 = Sigma[t], S20;
+        double dt_2 = 2.0 * dt;
         if (t<n-1) {
             dtp1 = x0[t+1] - mu[t+1];
             dttp_sum += dt * dtp1;
             dt_sum += dt;
             dt2_sum += dt * dt;
-            p_set(E1,  mu0[t] - x0[t],  mud[t],         0.5*mudd[t],  bddd[t]/6.0, 0.0);
-            p_set(b,   b0[t] - x0[t],   bd[t],          0.5*bdd[t],   bddd[t]/6.0, 0.0);
 
-            S0 *= exp(sd[t]*b[0]/ad[t]);
+            // Set E1, b
+            E1[0] = mu0[t] - x0[t];    b[0] = b0[t] - x0[t];
+            E1[1] = mud[t];            b[1] = bd[t];
+            E1[2] = 0.5*mudd[t];       b[2] = 0.5*bdd[t];
+            E1[3] =                    b[3] = (1.0/6.0) * bddd[t]/6.0;
+
+            // Set S, S2
+            S0 *= 1.0 + sd[t]*b[0]/ad[t];
             S20 = S0*S0;
-            p_set(S,   S0,              S0*sd[t],        0.5*S0*sdd[t], S0*sddd[t]/6.0, 0.0);
-            p_set(S2,  S20,             2*S20*sd[t],     S20*sdd[t],    S20*sddd[t]/3.0, 0.0);
+            S[0] = S0;                    S2[0] = S20;
+            S[1] = S0*sd[t];              S2[1] = 2*S20*sd[t];
+            S[2] = 0.5*S0*sdd[t];         S2[2] = S20*sdd[t];
+            S[3] = (1.0/6.0)*S0*sddd[t];  S2[3] = (1.0/3.0)*S20*sddd[t];
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
@@ -223,31 +230,23 @@ void compute_new_grad_Hess(
 
         // Compute polynomial delta, difference between conditional mean and mode
         p_subtract(delta, E1, b);
+        p_set_scalar_mult(b_2, 2.0, b);
 
-        // Compute intermediate polynomial products
-        p_mult(delta_S, delta, S);
-        p_mult(b_delta_S, b, delta_S);
-        p_square(E12, E1);
-        //p_square(delta2, delta);
-
-        // Compute V1 = Var[e_t|e_{t+1}] and E2 = E[e_t^2|e_{t+1}]
-        //p_subtract(V1, S, delta2);
-        p_set_scalar_mult(V1, 1.0, S);
+        // Compute V1 = Var[e_t|e_{t+1}], E[e_t|e_{t+1}]^2 and E2 = E[e_t^2|e_{t+1}]
+        memcpy(V1, S, p_len * sizeof(double));
+        p_square3(E12, E1);
         p_add(E2, V1, E12);
 
         // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
-        p_mult(b_V1, b, V1);
-        p_set_scalar_mult(C12, 2.0, b_V1);
-        p_add_scalar_mult(C12, 4.0, delta_S);
-
-        p_mult(E1_E2, E1, E2);
-        p_add(E3, C12, E1_E2);
+        p_set(C12, 4.0*delta[0]*S[0], 4.0*(delta[1]*S[0] + delta[0]*S[1]), 0.0, 0.0, 0.0);
+        p_mult_add(C12, b_2, V1);
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
-        p_mult(b2_V1, b, b_V1);
-        p_set_scalar_mult(V2, 4.0, b2_V1);
-        p_add_scalar_mult(V2, 8.0, b_delta_S);
-        p_add_scalar_mult(V2, 2.0, S2);
+        p_set_scalar_mult(V2, 2.0, S2);
+        p_mult_add(V2, b_2, C12);
+
+        memcpy(E3, C12, p_len * sizeof(double));
+        p_mult_add(E3, E1, E2);
 
         // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
         // in sequential procedure
@@ -262,7 +261,7 @@ void compute_new_grad_Hess(
             // except the one with the expectation of e_t e_{t+1} 
             if (iQ < 3) {
                 double Q_tt = ((t==0) || (t==n-1)) ? Qi->Q_11 : Qi->Q_tt;
-                Qi->m_tm1[1] += 2*Q_tt * dt + Qi->Q_ttp * (dtm1 + dtp1);
+                Qi->m_tm1[1] += Q_tt * dt_2 + Qi->Q_ttp * (dtm1 + dtp1);
                 Qi->m_tm1[2] += Q_tt;
             }
             else
