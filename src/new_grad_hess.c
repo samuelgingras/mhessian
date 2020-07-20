@@ -10,9 +10,9 @@
 //    p[0] + p[1] x + p[2] x^2 + p[3] x^3 + p[4] x^4.
 
 // polynomial assignment by element: p = (p0, p1, p2, p3, p4s)
-static inline void p_set(double *p, double p0, double p1, double p2, double p3, double p4)
+static inline void p_set(double *p, double p0, double p1, double p2, double p3)
 {
-    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3, p[4] = p4;
+    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3;
 }
 
 // polynomial assignment with scalar multiplication: p = c p1
@@ -53,18 +53,17 @@ static inline void p_mult_add(double *p, const double *p1, const double *p2)
     p[1] += p1[0]*p2[1] + p1[1]*p2[0];
     p[2] += p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
     p[3] += p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
-    p[4] += p1[0]*p2[4] + p1[1]*p2[3] + p1[2]*p2[2] + p1[3]*p2[1] + p1[4]*p2[0];
 }
 
 // polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
-// p1 is a 3rd order polynomial and higher orders than x^4 are dropped.
-static inline void p_square3(double *p, const double *p1)
+// Again, higher orders than x^3 are dropped.
+static inline void p_square(double *p, const double *p1)
 {
+    double p0_2 = 2.0 * p1[0];
     p[0] = p1[0]*p1[0];
-    p[1] = 2*p1[0]*p1[1];
-    p[2] = p1[1]*p1[1] + 2*p1[0]*p1[2];
-    p[3] = 2*p1[0]*p1[3] + 2*p1[1]*p1[2];
-    p[4] = p1[2]*p1[2] + 2*p1[1]*p1[3];
+    p[1] = p0_2*p1[1];
+    p[2] = p1[1]*p1[1] + p0_2*p1[2];
+    p[3] = p0_2*p1[3] + 2*p1[1]*p1[2];
 }
 
 // polynomial expectation operator
@@ -100,10 +99,9 @@ static inline void p_cov(
 }
 
 // print a polynomial (in a variable e) to the Matlab console
-static void p_print(char *s, double *poly)
+static void p_print(char *s, double *p)
 {
-    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3 + %lf e^4\n", s,
-        poly[0], poly[1], poly[2], poly[3], poly[4]);
+    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3\n", s, p[0], p[1], p[2], p[3]);
 }
 
 // print m_t and m_tm1 polynomials for a given quadratic or linear form
@@ -222,10 +220,10 @@ void compute_new_grad_Hess(
         }
         else { // Last value is unconditional.
             dtp1 = 0.0;
-            p_set(E1,  mu0[t] - x0[t],  0.0, 0.0, 0.0, 0.0);
-            p_set(b,   b0[t] - x0[t],   0.0, 0.0, 0.0, 0.0);
-            p_set(S,   S0,              0.0, 0.0, 0.0, 0.0);
-            p_set(S2,  S20,             0.0, 0.0, 0.0, 0.0);
+            p_set(E1,  mu0[t] - x0[t],  0.0, 0.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   0.0, 0.0, 0.0);
+            p_set(S,   S0,              0.0, 0.0, 0.0);
+            p_set(S2,  S20,             0.0, 0.0, 0.0);
         }
 
         // Compute polynomial delta, difference between conditional mean and mode
@@ -234,11 +232,11 @@ void compute_new_grad_Hess(
 
         // Compute V1 = Var[e_t|e_{t+1}], E[e_t|e_{t+1}]^2 and E2 = E[e_t^2|e_{t+1}]
         memcpy(V1, S, p_len * sizeof(double));
-        p_square3(E12, E1);
+        p_square(E12, E1);
         p_add(E2, V1, E12);
 
         // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
-        p_set(C12, 4.0*delta[0]*S[0], 4.0*(delta[1]*S[0] + delta[0]*S[1]), 0.0, 0.0, 0.0);
+        p_set(C12, 4.0*delta[0]*S[0], 4.0*(delta[1]*S[0] + delta[0]*S[1]), 0.0, 0.0);
         p_mult_add(C12, b_2, V1);
 
         // Computation of V2 = Var[e_t^2|e_{t+1}]
@@ -273,7 +271,6 @@ void compute_new_grad_Hess(
                 Qi->m_t[1] += Qi->Q_ttp * E1[0];
                 Qi->m_t[2] += Qi->Q_ttp * E1[1];
                 Qi->m_t[3] += Qi->Q_ttp * E1[2];
-                Qi->m_t[4] += Qi->Q_ttp * E1[3];
             }
         }
 
@@ -298,12 +295,10 @@ void compute_new_grad_Hess(
                     C12_e += Qi->m_tm1[2] * Qj->Q_ttp;
                     Ci->c_t[2] += V1_e2 * V1[0];
                     Ci->c_t[3] += V1_e2 * V1[1];
-                    Ci->c_t[4] += V1_e2 * V1[2];
                 }
                 Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
                 Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
                 Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
-                Ci->c_t[4] += V1_e * V1[3] + C12_e * C12[3];
             }
             memcpy(Ci->c_tm1, Ci->c_t, p_len * sizeof(double));
         }

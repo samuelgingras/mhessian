@@ -3,7 +3,7 @@
 #ifndef MEX_NEW_GRAD_HESS
 #define MEX_NEW_GRAD_HESS
 
-#define p_len 5
+#define p_len 4
 
 typedef struct {
     double Q_11;
