@@ -11,7 +11,7 @@ void ErrMsgTxt(bool assertion, const char *text)
 
 void mexFunction(int nlhs, mxArray *plhs[], const int nrhs, const mxArray *prhs[])
 {
-    // Check number of input/output argument
+    
     ErrMsgTxt( nrhs == 3,
     "Invalid inputs: Three input arguments expected");
     
