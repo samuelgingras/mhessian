@@ -17,7 +17,6 @@ hessianMethod(1234)
 ndraw  = 10^3;              % Nb of simulated block
 nblock = 1000;              % Nb of draw by block
 ndata  = 25;                % Nb of artificial observation
-Q      = 0.1:0.1:0.9;       % Quantiles for posterior verification
 
 % Set model parameters
 model  = 'student_SV';      % Observation model    
@@ -25,6 +24,9 @@ mu0    = 0.0;               % Mean
 phi0   = 0.95;              % Autocorrelation
 omega0 = 100.0;             % Precision
 nu0    = 12.0;              % Student's t degree of freedom
+
+% Set quantile for check implementation correctness
+Q = 0.1:0.1:0.9;
 
 % Reserve space to store results
 postsim.count1 = zeros(ndraw,length(Q));
