@@ -5,9 +5,9 @@
 
 // The following functions are utilities for operations on 4th order polynomials.
 // They give 4th order polynomial results; any higher order terms are dropped.
-// The vector (p[0], p[1], p[2], p[3], p[4]) represents the polynomial
+// The vector (p[0], p[1], p[2], p[3]) represents the polynomial
 //
-//    p[0] + p[1] x + p[2] x^2 + p[3] x^3 + p[4] x^4.
+//    p[0] + p[1] x + p[2] x^2 + p[3] x^3.
 
 // polynomial assignment by element: p = (p0, p1, p2, p3, p4s)
 static inline void p_set(double *p, double p0, double p1, double p2, double p3)
