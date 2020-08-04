@@ -8,9 +8,9 @@ typedef struct {
     int m;              // Nb of state
     double *y;          // Vector of observations
     
-    double *s;      // Latent indicator for regular/burst regime
-    double *k;      // State indicator
-    int *pos;         // Position of state (computed using state indicator)
+    double *s;          // Latent indicator for regular/burst regime
+    double *k;          // State indicator
+    int *pos;           // Position of state (computed using state indicator)
 } Data;
 
 typedef struct {
@@ -33,6 +33,12 @@ typedef struct {
 typedef struct {
     int n;
     int is_basic;
+
+    // For gradHess approximation
+    int is_mu_basic;
+    int is_phi_basic;
+    int is_omega_basic;
+    int is_grad_hess;
     
     double alpha_mean;
     double phi;
@@ -133,7 +139,6 @@ typedef struct {
 } Field;
 
 void initializeThetaAlpha( const mxArray *prhs, State_parameter *theta_alpha );
-void readComputationOptions( const mxArray *prhs, State *state );
 State *stateAlloc( void );
 Theta *thetaAlloc( void );
 Data *dataAlloc( void );
