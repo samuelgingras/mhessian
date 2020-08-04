@@ -23,3 +23,23 @@ end
 gnew
 Vnew
 Hnew + Vnew
+
+
+
+% Check new interface
+ndata = 1000;
+model = 'gaussian_SV';
+
+mu = -10.00;
+phi = 0.9840;
+omega = 40;
+
+theta.N = ndata;
+theta.mu = mu;
+theta.phi = phi;
+theta.omega = omega;
+
+x = drawState( theta );
+y = drawObs( x, model );
+
+hmout = hessianMethod( model, y, theta , 'GradHess', 'Long');

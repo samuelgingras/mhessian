@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include "mex.h"
 #include "alpha_univariate.h"
+#include "grad_hess.h"
 #include "state.h"
 #include "errors.h"
 #include "model.h"
@@ -9,30 +10,36 @@
 #define TRUE    1
 #define FALSE   0
 
+
+// Call for seed of rng:
 // hessianMethod( seed )
+
+// Call for computation
 // hmout = hessianMethod( model, data, theta, ... )
+// [ hmout, state ] = hessianMethod( model, data, theta, ... )
 
 void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 {
+
     // Set Seed
-    if( nrhs == 1 )
-    {
-        if( !mxIsScalar(prhs[0]) )
+    if( nrhs == 1 ) {
+        if( !mxIsScalar(prhs[0]) ) {
             mexErrMsgIdAndTxt( "mhessian:invalidInputs",
                 "SetSeed: Scaler input required.");
+        }
 
         // TODO: check if input is an integer
         // ...
 
-        if( mxGetScalar(prhs[0]) < 0 )
+        if( mxGetScalar(prhs[0]) < 0 ) {
             mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                 "SetSeed: Positive integer required.");
+        }
 
         int seed = mxGetScalar(prhs[0]);
         rng_init_rand( (unsigned long)seed );
     }
-    else 
-    {
+    else {
         // Check input and output arguments
         ErrMsgTxt( nrhs >= 3,
         "Invalid inputs: Three input arguments expected");
@@ -63,121 +70,199 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         ErrMsgTxt( data->m == theta->alpha->n,
         "Invalid input argument: incompatible vector length");
         
-        
         // Create/set field pointer for output structure
         mxArray *x = mxGetField(mxState,0,"x");
-        mxArray *x_alC = mxGetField(mxState,0,"x_mode");
+        mxArray *xC = mxGetField(mxState,0,"xC");
         mxArray *lnp_y = mxCreateDoubleMatrix(1,1,mxREAL);
         mxArray *lnp_x = mxCreateDoubleMatrix(1,1,mxREAL);
         mxArray *lnq_x = mxCreateDoubleMatrix(1,1,mxREAL);
 
-        // Check computation options
-        int iter;
-        int isDraw = TRUE;
-        if( (nrhs % 2) != 1  )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidRHS",
-                "Set options: Pair of input by option required.");
+        // (1) Find conditional mode and compute derivatives
+        compute_alC_all(model, theta, state, data);
+
+        // (2) Parse options
+        int iter;                   // To parse pair of (opt, value)
+        int isDraw = TRUE;          // Draw and Eval or Eval only
+        int doGradHess = FALSE;     // Compute grad Hess approximation
+        int long_th = TRUE;         // Size of theta for grad Hess
+
+
+        if( (nrhs % 2) != 1  ) {
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:rhs", 
+                "Options: Pair of input by option required.");
+        }
 
         // Check GuessMode option
-        for( iter=3; iter < nrhs; iter+=2 )
-        {
-            if( !mxIsChar(prhs[iter]) )
+        for( iter=3; iter < nrhs; iter+=2 ) {
+            if( !mxIsChar(prhs[iter]) ) {
                 mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                     "Set options: String input required.");
+            }
 
             char *opt = mxArrayToString( prhs[iter] );
-            if( opt == NULL )
+            if( opt == NULL ) {
                 mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
                     "Error reading computation option." );
+            }
 
-            if( strcmp(opt, "GuessMode") == 0)
-            {
-                if( !mxIsDouble(prhs[iter+1]) )
+            if( strcmp(opt, "GuessMode") == 0) {
+                if( !mxIsDouble(prhs[iter+1]) ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "GuessMode option: Double vector required.");
-
-                if( mxGetM(prhs[iter+1]) != state->n )
+                }
+                if( mxGetM(prhs[iter+1]) != state->n ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "GuessMode option: Incompatible vector length.");
-
+                }
                 state->guess_alC = TRUE;
                 memcpy(state->alC, mxGetDoubles(prhs[iter+1]), state->n * sizeof(double));
             }
             mxFree(opt);
         }
 
-        // Execute HESSIAN method
-        // (1) Find conditional mode
-        compute_alC_all(model, theta, state, data);
-
-        // TODO: Add DoDiagnostic option here
-        // ...
-
         // Check EvalAtState or EvalAtMode option
-        for( iter=3; iter < nrhs; iter+=2 )
-        {
-            if( !mxIsChar(prhs[iter]) )
+        for( iter=3; iter < nrhs; iter+=2 ) {
+            if( !mxIsChar(prhs[iter]) ) {
                 mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                     "Set options: String input required.");
+            }
 
             char *opt = mxArrayToString( prhs[iter] );
-            if( opt == NULL )
+            if( opt == NULL ) {
                 mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
                     "Error reading computation option." );
+            }
 
-            if( strcmp(opt, "EvalAtMode") == 0) 
-            {
-                if( !mxIsLogicalScalar(prhs[iter+1]) )
+            if( strcmp(opt, "EvalAtMode") == 0) {
+                if( !mxIsLogicalScalar(prhs[iter+1]) ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "EvalAtMode option: Logical scalar required.");
-
-                if( mxIsLogicalScalarTrue(prhs[iter+1]) )
-                {  
+                }
+                if( mxIsLogicalScalarTrue(prhs[iter+1]) ) {  
                     isDraw = FALSE;
                     memcpy(state->alpha, state->alC, state->n * sizeof(double));
                 }
             }
-            else if( strcmp(opt, "EvalAtState") == 0)
-            {
-                if( !mxIsDouble(prhs[iter+1]) )
+            else if( strcmp(opt, "EvalAtState") == 0) {
+                if( !mxIsDouble(prhs[iter+1]) ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "EvalAtState: Double vector required.");
-
-                if( mxGetM(prhs[iter+1]) != state->n )
+                }
+                if( mxGetM(prhs[iter+1]) != state->n ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "EvalAtState: Incompatible column vector.");
-
+                }
                 isDraw = FALSE;
                 memcpy(state->alpha, mxGetDoubles(prhs[iter+1]), state->n * sizeof(double));
             }
             mxFree(opt);
         }
 
-        // (2) Draw state and evaluate proposal log-likelihood
-        draw_HESSIAN( isDraw, model, theta, state, data, mxGetPr(lnq_x) );
-        
-        // (3) Evaluate state prior log-likelihood
-        alpha_prior_eval( theta->alpha, state->alpha, mxGetPr(lnp_x) );
-        
-        // (4) Evaluate observation conditional log-likelihood given the states
-        model->log_f_y__theta_alpha( state->alpha, theta->y, data, mxGetPr(lnp_y) );
-        
-        // TODO: Add GradHess option here and update output structure
+        // Check gradHess option
+        for( iter=3; iter < nrhs; iter+=2 ) {
+            if( !mxIsChar(prhs[iter]) ) {
+                mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                    "Set options: String input required.");
+            }
+
+            char *opt = mxArrayToString( prhs[iter] );
+            if( opt == NULL ) {
+                mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
+                    "Error reading computation option." );
+            }
+
+            if( strcmp(opt, "GradHess") == 0 ) {
+                if( !theta->alpha->is_grad_hess ) {
+                    mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                        "GradHess: Unavailable theta specification."); 
+                }
+                if( !mxIsChar(prhs[iter+1]) ) {
+                    mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                        "GradHess option: 'Long' or 'Short' option required.");
+                }
+
+                char *value = mxArrayToString( prhs[iter+1] );
+                if( value == NULL ) {
+                    mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
+                        "Error reading computation option." );
+                }
+                if( strcmp( value, "Short") == 0 ) {
+                    long_th = FALSE;
+                }
+                else if( strcmp( value, "Long" ) != 0 ) {
+                    mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                        "GradHess option: 'Long' or 'Short' option available.");
+                }
+                doGradHess = TRUE;
+                mxFree(value);
+            }
+            mxFree(opt);
+        }
+
+        // TODO: Add DoDiagnostic option here
         // ...
 
-        // Create matlab output structure
-        const char *field_names[] = {"x","x_mode","lnp_y__x","lnp_x","lnq_x__y"};
+        // (3) Draw state and/or evaluate proposal log-likelihood
+        draw_HESSIAN( isDraw, model, theta, state, data, mxGetPr(lnq_x) );
         
-        plhs[0] = mxCreateStructMatrix(1,1,5,field_names);
-        mxSetField(plhs[0],0,"x", mxDuplicateArray(x));
-        mxSetField(plhs[0],0,"x_mode", mxDuplicateArray(x_alC));
-        mxSetField(plhs[0],0,"lnp_y__x", lnp_y);
-        mxSetField(plhs[0],0,"lnp_x", lnp_x);
-        mxSetField(plhs[0],0,"lnq_x__y", lnq_x);
+        // (4) Evaluate states prior log-likelihood
+        alpha_prior_eval( theta->alpha, state->alpha, mxGetPr(lnp_x) );
         
+        // (5) Evaluate observations conditional log-likelihood given the states
+        model->log_f_y__theta_alpha( state->alpha, theta->y, data, mxGetPr(lnp_y) );
+        
+
+        // Create MATLAB output structure
+        if( doGradHess ) {
+
+            int dim_th = long_th ? 3 : 2;
+            mxArray *grad = mxCreateDoubleMatrix(dim_th, 1, mxREAL);
+            mxArray *Hess = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
+            mxArray *Var = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
+
+            // Compute gradHess approximation
+            compute_grad_Hess( long_th, state, theta, mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var) );
+
+            // Set field names
+            const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y", "q_theta"};
+            const char *field_gradHess[] = {"grad", "Hess", "Var"};
+            
+            // Create gradHess output structure
+            mxArray *q_theta = mxCreateStructMatrix(1, 1, 3, field_gradHess);
+            mxSetField(q_theta, 0, "grad", grad);
+            mxSetField(q_theta, 0, "Hess", Hess);
+            mxSetField(q_theta, 0, "Var", Var);
+
+
+            // Create MATLAB output structure
+            plhs[0] = mxCreateStructMatrix(1, 1, 6, field_hmout);
+            mxSetField(plhs[0], 0, "x", mxDuplicateArray(x));
+            mxSetField(plhs[0], 0, "xC", mxDuplicateArray(xC));
+            mxSetField(plhs[0], 0, "lnp_y__x", lnp_y);
+            mxSetField(plhs[0], 0, "lnp_x", lnp_x);
+            mxSetField(plhs[0], 0, "lnq_x__y", lnq_x);
+            mxSetField(plhs[0], 0, "q_theta", q_theta);
+
+        }
+        else {
+
+            // Set field names
+            const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y"};
+            
+            // Create MATLAB output structure
+            plhs[0] = mxCreateStructMatrix(1, 1, 5, field_hmout);
+            mxSetField(plhs[0], 0, "x", mxDuplicateArray(x));
+            mxSetField(plhs[0], 0, "xC", mxDuplicateArray(xC));
+            mxSetField(plhs[0], 0, "lnp_y__x", lnp_y);
+            mxSetField(plhs[0], 0, "lnp_x", lnp_x);
+            mxSetField(plhs[0], 0, "lnq_x__y", lnq_x);
+
+        }
+
         // Return mxState if second output argument
-        if( nlhs == 2 )
+        if( nlhs == 2 ) {
             plhs[1] = mxState;  
+        }
     }
 }
 

@@ -1,322 +1,360 @@
 #include <math.h>
+#include <string.h>
 #include "mex.h"
+#include "state.h"
 #include "grad_hess.h"
 
-// The following functions are utilities for operations on 2nd order polynomials.
-// They give 2nd order polynomial results; higher order terms are dropped.
-// The vector (poly[0], poly[1], poly[2]) represents the polynomial
+// The following functions are utilities for operations on 4th order polynomials.
+// They give 4th order polynomial results; any higher order terms are dropped.
+// The vector (p[0], p[1], p[2], p[3]) represents the polynomial
 //
-//    poly[0] + poly[1] x + poly[2] x^2.
+//    p[0] + p[1] x + p[2] x^2 + p[3] x^3.
 
-// full polynomial multiplication
-static inline void poly_mult(double *poly, const double *poly1, const double *poly2)
+// polynomial assignment by element: p = (p0, p1, p2, p3, p4s)
+static inline void p_set(double *p, double p0, double p1, double p2, double p3)
 {
-    poly[0] = poly1[0]*poly2[0];
-    poly[1] = poly1[0]*poly2[1] + poly1[1]*poly2[0];
-    poly[2] = poly1[0]*poly2[2] + poly1[1]*poly2[1] + poly1[2]*poly2[0];
+    p[0] = p0; p[1] = p1; p[2] = p2; p[3] = p3;
 }
 
-// polynomial assignment
-static inline void poly_copy(double *poly, const double *poly1)
+// polynomial assignment with scalar multiplication: p = c p1
+static inline void p_set_scalar_mult(double *p, double c, const double *p1)
+{
+  int i;
+  for (i=0; i<p_len; i++)
+    p[i] = c * p1[i];
+}
+
+// polynomial addition with scalar multiplication p += c p1
+static inline void p_add_scalar_mult(double *p, double c, const double *p1)
+{
+  int i;
+  for (i=0; i<p_len; i++)
+    p[i] += c * p1[i];
+}
+
+// polynomial addition: p = p1 + p2
+static inline void p_add(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<3; i++)
-        poly[i] = poly1[i];
+    for (i=0; i<p_len; i++)
+        p[i] = p1[i] + p2[i];
 }
 
-// polynomial addition
-static inline void poly_add(double *poly, const double *poly1)
+// polynomial subtraction: p = p1 - p2
+static inline void p_subtract(double *p, const double *p1, const double *p2)
 {
     int i;
-    for (i=0; i<3; i++)
-        poly[i] += poly1[i];
+    for (i=0; i<p_len; i++)
+        p[i] = p1[i] - p2[i];
 }
 
-// polynomial subtraction
-static inline void poly_subtract(double *poly, const double *poly1)
+static inline void p_mult_add(double *p, const double *p1, const double *p2)
 {
-    int i;
-    for (i=0; i<3; i++)
-        poly[i] -= poly1[i];
+    p[0] += p1[0]*p2[0];
+    p[1] += p1[0]*p2[1] + p1[1]*p2[0];
+    p[2] += p1[0]*p2[2] + p1[1]*p2[1] + p1[2]*p2[0];
+    p[3] += p1[0]*p2[3] + p1[1]*p2[2] + p1[2]*p2[1] + p1[3]*p2[0];
 }
 
-// polynomial scalar multiplication
-static inline void poly_scalar_mult(double *poly, double c)
+// polynomial square: p = p1 * p1 (slightly more efficient than using p_mult)
+// Again, higher orders than x^3 are dropped.
+static inline void p_square(double *p, const double *p1)
 {
-    int i;
-    for (i=0; i<3; i++)
-        poly[i] *= c;
+    double p0_2 = 2.0 * p1[0];
+    p[0] = p1[0]*p1[0];
+    p[1] = p0_2*p1[1];
+    p[2] = p1[1]*p1[1] + p0_2*p1[2];
+    p[3] = p0_2*p1[3] + 2*p1[1]*p1[2];
 }
 
-static inline void poly_recip_1m(double *poly, double *poly1)
+// polynomial expectation operator
+static inline void p_expect(
+    // Output, a polynomial in e_{t+1} approximating E[p(e_t) | e_{t+1}]
+    double *Ep,
+    // Input, a polynomial in e_t
+    double *p,
+    // E[e_t|e_{t+1}], E[e_t^2|e_{t+1}], E[e_t^3|e_{t+1}] as polynomials in e_{t+1}
+    const double *E1, const double *E2, const double *E3
+    )
 {
-    poly[0] = poly1[0] * (1 + poly1[0]);
-    poly[1] = poly1[1] * (1 + 2*poly1[0]);
-    poly[2] = poly1[1] * poly1[1] + poly1[2] * (1 + 2*poly1[0]);
+    p_set_scalar_mult(Ep, p[1], E1);
+    p_add_scalar_mult(Ep, p[2], E2);
+    p_add_scalar_mult(Ep, p[3], E3);
+    Ep[0] += p[0];
 }
 
-// mean of a polynomial function of a random variable with mean zero and 
-// variance Vareps_tp1
-static inline double poly_eval_mean(double *poly, double Vareps_tp1)
+// polynomial covariance operator
+static inline void p_cov(
+    // Output, a polynomial in e_{t+1} approximating Cov[p1(e_t, p2(e_t) | e_{t+1}]
+    double *Cp1p2,
+    // Inputs, polynomials in e_t
+    const double *p1, const double *p2,
+    // Var[e_t | e_{t+1}], Cov[e_t, e_t^2 | e_{t+1}] and Var[e_t^2 | e_{t+1}]
+    // as polynomials in e_{t+1}
+    const double *V1, const double *C12, const double *V2 
+)
 {
-    return poly[0] + poly[2]*Vareps_tp1;
+    p_add_scalar_mult(Cp1p2, p1[1] * p2[1], V1);
+    p_add_scalar_mult(Cp1p2, p1[2] * p2[2], V2);
+    p_add_scalar_mult(Cp1p2, p1[1] * p2[2] + p1[2] * p2[1], C12);
 }
 
 // print a polynomial (in a variable e) to the Matlab console
-static inline void poly_print(char *s, double *poly)
+static void p_print(char *s, double *p)
 {
-    mexPrintf("%s: %lf + %lf e + %lf e^2\n", s, poly[0], poly[1], poly[2]);
+    mexPrintf("%s: %lf + %lf e + %lf e^2 + %lf e^3\n", s, p[0], p[1], p[2], p[3]);
 }
 
-static inline double *mxStateGetPr(const mxArray *mxState, char *field_name)
+// print m_t and m_tm1 polynomials for a given quadratic or linear form
+static void Q_print(char *s, Q_term *Q)
 {
-    mxArray *field_pr = mxGetField(mxState, 0, field_name);
-    return mxGetPr(field_pr);
+    mexPrintf("%s: Q_11 = %lf, Q_tt = %lf, Q_ttp = %lf, q_1 = %lf, q_t = %lf\n",
+        s, Q->Q_11, Q->Q_tt, Q->Q_ttp, Q->q_1, Q->q_t);
+    mexPrintf("\tm_t = (%lf, %lf, %lf, %lf)\n", Q->m_t[0], Q->m_t[1], Q->m_t[2], Q->m_t[3]);
+    mexPrintf("\tm_tm1 = (%lf, %lf, %lf, %lf)\n\n", Q->m_tm1[0], Q->m_tm1[1], Q->m_tm1[2], Q->m_tm1[3]);
 }
+
 
 void compute_grad_Hess(
-    const mxArray *mxState, // mode of state sequence, and related information
-    int n,
-    double *mu,
-    double phi,    // autoregressive parameter of state series
-    double omega,  // innovation precision (reciprocal of variance) of state series
-    double *u,
+    // Input
+    int long_th,
+    // long_th = FALSE for theta = (ln(omega), atanh(phi))),
+    // long_th = TRUE  for theta = (ln(omega), atanh(phi)), mu)
+    State *state,   // Structure with derivatives
+    Theta *theta,   // Structure with parameters
     // Output
-    double *grad,  // gradiant of log target density log p(theta|y)
-    double *Hess,  // Hessian matrix of log target density log p(theta|y)
-    double *var
+    double *grad, // Vector, approximation of E[g_{x|\theta}(\theta)]
+    double *Hess, // Matrix, approximation of E[H_{x|\theta)(\theta)]
+    double *var   // Matrix, approximation of Var[g_{x|\theta}(\theta)]
     )
 {
-    int i, j, t, vec_type;
-    double *x0 = mxStateGetPr(mxState,"x_mode");
-    double *Sigma = mxStateGetPr(mxState,"Sigma");
-    double *ad = mxStateGetPr(mxState,"ad");
-    double *add = mxStateGetPr(mxState,"add");
-    double *mu0 = mxStateGetPr(mxState,"mu");
-    double *mud = mxStateGetPr(mxState,"mud");
-    double *mudd = mxStateGetPr(mxState,"mudd");
-    double *s0 = mxStateGetPr(mxState,"Sigma");
-    double *sd = mxStateGetPr(mxState,"sd");
-    double *b = mxStateGetPr(mxState,"b");
-    double *bd = mxStateGetPr(mxState,"bd");
-    double *bdd = mxStateGetPr(mxState,"bdd");
-    double *bddd = mxStateGetPr(mxState,"bddd");
-    double *psi = mxStateGetPr(mxState,"psi");
-    int psi_stride = 6;     // Return as an element of State ?
-    
-    double *m = (double *) mxMalloc(n * sizeof(double));
-    double *e = (double *) mxMalloc(n * sizeof(double));
-    double *Sig_adj = (double *) mxMalloc(n * sizeof(double));
-    double *mud_adj = (double *) mxMalloc(n * sizeof(double));
-    
-    double Eeps_t = 0.0, s2_t, Vareps_t = 0.0, const_t = 0.0;
-    double Eeps_tp1, Vareps_tp1, Ee3_tp1, Ee4_tp1, Vare2_tp1, const_tp1;
-    double Varu_t, Eu_teps_tp;
-    
-    double poly_delta[3], poly_delta2[3], poly_b[3], poly_b2[3], poly_mu[3];
-    double poly_h_den[3], poly_h_den_2[3], poly_h_num[3];
-    double h = omega*(1-phi*phi);
-    double H = omega*(1-phi)*(1-phi);
-    
-    // Case n-1
-    double *psi_t = psi + (n-1)*psi_stride;
-    double b_n = b[n-1] - x0[n-1];
-    
-    double h_den = omega*phi*(mud[n-2] - ad[n-2] + mudd[n-2]*b_n + 0.5*bddd[n-2]*b_n*b_n);
-    h_den += psi_t[3]*b_n + 0.5*psi_t[4]*b_n*b_n;
-    s2_t = Sigma[n-1] * 1/(1-Sigma[n-1]*h_den);
-    s2_t *= (1 + 0.5 * psi_t[4] * s2_t * s2_t);
-    double delta_n = 0.5*s2_t*s2_t*(psi_t[3] + psi_t[4]*b_n + omega*phi*mudd[n-2] + bddd[n-1]*b_n*b_n);
-    Eeps_t = b_n + delta_n;
-    Eeps_t += 0.01;
-    s2_t -= delta_n*delta_n;
-    Sig_adj[n-1] = s2_t;
-    Vareps_t = s2_t;
-    double diag_tr = (1-phi*phi) * s2_t * s2_t;
-    double Az_tm1 = diag_tr;
-    double off_diag_tr = diag_tr;
-    
-    // c_t is the posterior mean E[x_t|theta, y]
-    // and mu_t is the prior mean E[x_t|theta]
-    // m[t] is c_t - mu_t
-    m[n-1] = const_t = x0[n-1] + Eeps_t - mu[n-1];
-    grad[0] = (1-phi*phi) * (const_t * const_t + Vareps_t);
-    grad[1] = phi * (const_t * const_t + Vareps_t);
-    grad[2] = omega * (1-phi) * const_t;
-    Hess[4] = 0.0;
-    Hess[5] = const_t;
-    
-    // To carry to next iteration
-    Ee3_tp1 = 5*s2_t*delta_n + 3*delta_n*delta_n*delta_n;
-    Ee4_tp1 = 3*s2_t*s2_t;
-    Vare2_tp1 = 2*s2_t*s2_t;
-    
-    e[n-1] = u[n-1] * sqrt(Sigma[n-1]);
-    for (t=n-2; t>=0; t--) {
-        double *psi_t = psi + t*psi_stride;
-        
-        // Values from t+1
-        Eeps_tp1 = Eeps_t;
-        Vareps_tp1 = Vareps_t;
-        const_tp1 = const_t;
-        
-        // Compute polynomials mu(e_{t+1}), b(e_{t+1}) and their difference delta(e_{t+1})
-        poly_mu[0] = (mu0[t] - x0[t]) + (mud[t] + (0.5*mudd[t] + (1.0/6)*bddd[t]*Eeps_tp1)*Eeps_tp1)*Eeps_tp1;
-        poly_mu[1] = mud[t] + (mudd[t] + 0.5*bddd[t]*Eeps_tp1)*Eeps_tp1;
-        poly_mu[2] = 0.5*(mudd[t] + bddd[t]*Eeps_tp1);
-        poly_b[0] = (b[t] - x0[t]) + (bd[t] + (0.5*bdd[t] + (1.0/6)*bddd[t]*Eeps_tp1)*Eeps_tp1)*Eeps_tp1;
-        poly_b[1] = bd[t] + (bdd[t] + 0.5*bddd[t]*Eeps_tp1)*Eeps_tp1;
-        poly_b[2] = 0.5*(bdd[t] + bddd[t]*Eeps_tp1);
-        poly_copy(poly_delta, poly_mu);
-        poly_subtract(poly_delta, poly_b);
-        
-        // Compute E[eps_t] term
-        Eeps_t = poly_eval_mean(poly_mu, Vareps_tp1) + (1.0/6)*bddd[t]*Ee3_tp1;
-        
-        // Compute s2_t
-        poly_mult(poly_b2, poly_b, poly_b);
-        poly_copy(poly_h_den, poly_b);
-        poly_scalar_mult(poly_h_den, ad[t]*((t==0)?0.0:mudd[t-1]) + Sigma[t]*psi_t[3]);
-        poly_copy(poly_h_den_2, poly_b2);
-        poly_scalar_mult(poly_h_den_2, 0.5*(ad[t]*((t==0)?0.0:bddd[t-1]) + Sigma[t]*psi_t[4]));
-        poly_add(poly_h_den, poly_h_den_2);
-        if (t>0)
-            poly_h_den[0] += ad[t] * (mud[t-1] - ad[t-1]);
-        poly_recip_1m(poly_h_num, poly_h_den);
-        poly_mult(poly_delta2, poly_delta, poly_delta);
-        double eval1 = poly_eval_mean(poly_h_num, Vareps_tp1);
-        double eval2 = poly_eval_mean(poly_delta2, Vareps_tp1);
-        double s2_t = Sigma[t] * (1 + eval1);
-        s2_t *= (1 + 0.5 * psi_t[4] * s2_t * s2_t);
-        s2_t -= eval2;
-        Sig_adj[t] = s2_t;
-        mud_adj[t] = poly_mu[1];
-        
-        // Add Var[E[eps_t|eps_{t+1}] term to get Var[eps_t] term
-        Vareps_t = s2_t + poly_mu[1]*poly_mu[1] * Vareps_tp1;
-        Vareps_t += 2 * poly_mu[1] * poly_mu[2] * Ee3_tp1;
-        Vareps_t += 2 * poly_mu[1] * (1.0/6) * bddd[t] * Ee4_tp1;
-        Vareps_t += poly_mu[2] * poly_mu[2] * Vare2_tp1;
-        
-        // Var[E[e_t - e_{t+1}|x_{t+1}]]
-        double mud_phi_t = poly_mu[1] - phi;
-        Varu_t = s2_t + mud_phi_t*mud_phi_t * Vareps_tp1;
-        Varu_t += 2 * mud_phi_t * poly_mu[2] * Ee3_tp1;
-        Varu_t += 2 * mud_phi_t * (1.0/6) * bddd[t] * Ee4_tp1;
-        Varu_t += poly_mu[2] * poly_mu[2] * Vare2_tp1;
-        diag_tr += Varu_t * Varu_t;
-        if (t>1) {
-            double xx = Vareps_t - phi * poly_mu[1] * Vareps_tp1;
-            Az_tm1 = poly_mu[1]*poly_mu[1]*Az_tm1 + xx*xx;
-            off_diag_tr += mud_phi_t * mud_phi_t * Az_tm1;
-        }
-        
-        Eu_teps_tp = mud_phi_t * Vareps_tp1;
-        Eu_teps_tp += poly_mu[2] * Ee3_tp1;
-        Eu_teps_tp += (1.0/6) * bddd[t] * Ee4_tp1;
-        
-        // Compute terms of gradient elements
-        m[t] = const_t = x0[t] + Eeps_t - mu[t];
-        double c1 = const_t - phi*const_tp1;
-        double c2 = c1 * const_tp1;
-        grad[0] += c1*c1 + Varu_t;
-        grad[1] += c2 + Eu_teps_tp;
-        if (t==0) {
-            grad[2] += omega * (1-phi) * const_t;
-            Hess[5] += const_t;
-        }
-        else {
-            grad[2] += H * const_t;
-            Hess[4] += const_t * const_t + Vareps_t;
-            Hess[5] += 2 * (1-phi) * const_t;
-        }
-        
-        // Compute e from common random numbers u
-        e[t] = (mud[t] + 0.5*mudd[t]*e[t+1]) * e[t+1] + sqrt(Sigma[t]) * u[t];
-        
-        // Compute current values for next iteration: tp1 is the current value of t, to become t+1
-        double Ee3 = Ee3_tp1;
-        Ee3_tp1 = poly_mu[1]*poly_mu[1]*poly_mu[1]*Ee3 + 3*poly_mu[1]*poly_mu[1]*poly_mu[2]*Vare2_tp1;
-        double delta_t = poly_eval_mean(poly_delta, Vareps_tp1);
-        Ee3_tp1 += 5 * s2_t * delta_t + 3 * delta_t * delta_t * delta_t;
-        Ee3_tp1 += 3*Sigma[t]
-            * (poly_h_num[1]*poly_mu[1]*Vareps_tp1 + (poly_mu[1]*poly_h_num[2]+poly_mu[2]*poly_h_num[1])*Ee3);
-        Vare2_tp1 = 2*Vareps_t*Vareps_t;
-        Ee4_tp1 = 3*Vareps_t*Vareps_t;
-    }
-    Hess[0] = -0.5*omega*grad[0];
-    // Add gradient of log normalization constant $k$
-    grad[0] = Hess[0] + 0.5*n;
-    grad[1] = grad[1] * h - phi;
-    
-    // Elements of Hess
-    // 0 1 2
-    // 3 4 5
-    // 6 7 8
-    Hess[1] = Hess[3] = 0.0;
-    Hess[2] = Hess[6] = 0.0;
-    Hess[4] = -(1-phi*phi) * h * Hess[4] - (1-phi*phi);
-    Hess[7] = Hess[5] = 0.0;
-    Hess[8] = -n*H - 2*phi*omega*(1-phi);
-    
-    double mQSQm[2][2] = {0.0}, eQSQe[2][2] = {0.0};
-    double Qm_t[2] = {0.0}, Qe_t[2] = {0.0};
-    double wm_t[3] = {0.0}, we_t[2] = {0.0};
-    double wm_tm1[3] = {0.0}, we_tm1[2] = {0.0};
-    double mQSv[2] = {0.0};
-    double vSv = 0.0;
+    int t, iQ, iC;
+    int n = state->n;               // Number of observations
+    double *x0 = state->alC;        // Mode
+    double *ad = state->ad;
+    double *b0 = state->b;;         // Value,
+    double *bd = state->bd;         // 1st derivative,
+    double *bdd = state->bdd;       // 2nd derivative, conditional mode
+    double *bddd = state->bddd;     // 3rd derivative, conditional mode
+    double *mu0 = state->mu;        // Same for conditional mean
+    double *mud = state->mud;       
+    double *mudd = state->mudd;
+    double *Sigma = state->Sigma;
+    double *sd = state->sd;         // 1st derivative of log(Sigma)
+    double *sdd = state->sdd;       // 2nd derivative of log(Sigma)
+    double *sddd = state->sddd;     // 3rd derivative of log(Sigma)
+             
+    double *mu = theta->alpha->mu_tm;       // Prior mean of x, as a vector
+    double phi = theta->alpha->phi;         // Autocorrelation parameter of x_t process
+    double omega = theta->alpha->omega;     // Innovation precision parameter of x_t process
+
+
+    int nQ = long_th ? 5 : 3;
+    int nC = long_th ? 6 : 3;
+
+    // Polynomials for conditional moments of e_t given e_{t+1}
+    double b[p_len] = {0}, delta[p_len] = {0}, S[p_len] = {0};   // Given
+    double b_2[p_len], S2[p_len], E12[p_len];  // Intermediate polynomials
+    double E1[p_len], E2[p_len], E3[p_len], C12[p_len], V1[p_len], V2[p_len]; // Direct moments
+
+    // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
+    // and vectors q and q_2.
+    // ------------------------------------------------------------------------------------
+    Q_term Q[5] = {0}; // Information about Q, Q_2, Q_{22}, q, q_2
+
+    // Set elements (1, 1), (t, t), (t, t+1) of the matrices Q, Q_2 and Q_{22}
+    Q[0].Q_11 = 1.0;  Q[0].Q_tt = 1+phi*phi;                    Q[0].Q_ttp = -2*phi;
+    Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -2*(1-phi*phi);
+    Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 4*phi*(1-phi*phi);
+
+    // Set elements 1 and t of the vectors q and q_2
+    Q[3].q_1 = 1-phi;         Q[3].q_t = (1-phi)*(1-phi);
+    Q[4].q_1 = -(1-phi*phi);  Q[4].q_t = -2*(1-phi*phi)*(1-phi);
+
+    // (i, j) coordinates for each of six required covariances
+    // The covariance fields c_tm1 and c_t are set to zero
+    C_term C[6] = {
+        {0, 0, {0.0}, {0.0}},  // 0, for Var[e^\top Q e]
+        {0, 1, {0.0}, {0.0}},  // 1, for Cov[e^\top Q e, e^\top Q_2 e]
+        {1, 1, {0.0}, {0.0}},  // 2, for Var[e^\top Q_2 e]
+        {0, 3, {0.0}, {0.0}},  // 3, for Cov[e^\top Q e, q e]
+        {1, 3, {0.0}, {0.0}},  // 4, for Cov[e^\top Q_2 e, q e]
+        {3, 3, {0.0}, {0.0}}   // 5  for Var[q e]
+    };
+
+    // Variables for computing d statistics
+    double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
+    double dt = d1, dtm1 = 0.0, dtp1 = 0.0, dt_sum = 0.0, dt2_sum = 0.0, dttp_sum = 0.0;
+
     for (t=0; t<n; t++) {
-        
-        for (vec_type=0; vec_type<2; vec_type++) { // Same computations for m and e vectors
-            double *v = vec_type ? m : e;
-            double *Qv_t = vec_type ? Qm_t : Qe_t;
-            double *w_t = vec_type ? wm_t : we_t;
-            double *w_tm1 = vec_type ? wm_tm1 : we_tm1;
-            double (*quad_form)[2] = vec_type ? mQSQm : eQSQe;
-            
-            if (t==0) {
-                Qv_t[0] = v[t] - phi * v[t+1];
-                Qv_t[1] = 0.5 * v[t+1];
+
+        // Part 1: compute polynomials E1, E2, V1, V2, C12 approximating
+        // E[e_t|e_{t+1], E[e_t^2|e_{t+1}], Var[e_t|e_{t+1}], Var[e_t|e_{t+1}]
+        // and Cov[e_t,e_t^2|e_{t+1}]. Polynomials are 2nd order in e_{t+1}
+        // -------------------------------------------------------------------
+
+        // Form E1, b and S polynomials as polynomials in
+        //   (x_{t+1} - x_{t+1}^\circ)
+        // E1 and b give conditional mean and mode of x_t given x_{t+1}
+        double S0 = Sigma[t], S20;
+        double dt_2 = 2.0 * dt;
+        if (t<n-1) {
+            dtp1 = x0[t+1] - mu[t+1];
+            dttp_sum += dt * dtp1;
+            dt_sum += dt;
+            dt2_sum += dt * dt;
+
+            // Set E1, b
+            E1[0] = mu0[t] - x0[t];    b[0] = b0[t] - x0[t];
+            E1[1] = mud[t];            b[1] = bd[t];
+            E1[2] = 0.5*mudd[t];       b[2] = 0.5*bdd[t];
+            E1[3] =                    b[3] = (1.0/6.0) * bddd[t]/6.0;
+
+            // Set S, S2
+            S0 *= 1.0 + sd[t]*b[0]/ad[t];
+            S20 = S0*S0;
+            S[0] = S0;                    S2[0] = S20;
+            S[1] = S0*sd[t];              S2[1] = 2*S20*sd[t];
+            S[2] = 0.5*S0*sdd[t];         S2[2] = S20*sdd[t];
+            S[3] = (1.0/6.0)*S0*sddd[t];  S2[3] = (1.0/3.0)*S20*sddd[t];
+        }
+        else { // Last value is unconditional.
+            dtp1 = 0.0;
+            p_set(E1,  mu0[t] - x0[t],  0.0, 0.0, 0.0);
+            p_set(b,   b0[t] - x0[t],   0.0, 0.0, 0.0);
+            p_set(S,   S0,              0.0, 0.0, 0.0);
+            p_set(S2,  S20,             0.0, 0.0, 0.0);
+        }
+
+        // Compute polynomial delta, difference between conditional mean and mode
+        p_subtract(delta, E1, b);
+        p_set_scalar_mult(b_2, 2.0, b);
+
+        // Compute V1 = Var[e_t|e_{t+1}], E[e_t|e_{t+1}]^2 and E2 = E[e_t^2|e_{t+1}]
+        memcpy(V1, S, p_len * sizeof(double));
+        p_square(E12, E1);
+        p_add(E2, V1, E12);
+
+        // Computation of C12 = Cov[e_t, e_t^2|e_{t+1}]
+        p_set(C12, 4.0*delta[0]*S[0], 4.0*(delta[1]*S[0] + delta[0]*S[1]), 0.0, 0.0);
+        p_mult_add(C12, b_2, V1);
+
+        // Computation of V2 = Var[e_t^2|e_{t+1}]
+        p_set_scalar_mult(V2, 2.0, S2);
+        p_mult_add(V2, b_2, C12);
+
+        memcpy(E3, C12, p_len * sizeof(double));
+        p_mult_add(E3, E1, E2);
+
+        // Part 2: compute m_t^{(i)}(e_{t+1}) and c_t^{(i,j)}(e_{t+1}) polynomials
+        // in sequential procedure
+        // -----------------------------------------------------------------------
+
+        // Compute m_t^{(i)}(e_{t+1}) for quadratic forms
+        for (iQ = 0; iQ < nQ; iQ++) {
+            Q_term *Qi = &(Q[iQ]);
+
+            // Add terms for e_t and e_t^2 in z^{(i)}(e_t, e_{t+1}) to
+            // \tilde{m}^{(i)}_{t-1} and compute all terms of \tilde{m}^{(i)}_t
+            // except the one with the expectation of e_t e_{t+1} 
+            if (iQ < 3) {
+                double Q_tt = ((t==0) || (t==n-1)) ? Qi->Q_11 : Qi->Q_tt;
+                Qi->m_tm1[1] += Q_tt * dt_2 + Qi->Q_ttp * (dtm1 + dtp1);
+                Qi->m_tm1[2] += Q_tt;
             }
-            else if (t==n-1) {
-                Qv_t[0] = v[t] - phi * v[t-1];
-                Qv_t[1] = 0.5 * v[t-1];
-            }
-            else {
-                Qv_t[0] = (1+phi*phi) * v[t] - phi * (v[t-1] + v[t+1]);
-                Qv_t[1] = -phi * v[t] + 0.5 * (v[t-1] + v[t+1]);
-            }
-            for (i=0; i<2; i++) {
-                w_t[i] = Qv_t[i];
-                if (t>0)
-                    w_t[i] += mud_adj[t-1] * w_tm1[i];
-            }
-            if (vec_type) {
-                w_t[2] = (t==0 || t==n-1) ? (1-phi) : (1-phi)*(1-phi);
-                if (t>0)
-                    w_t[2] += mud_adj[t-1] * w_tm1[2];
-                for (i=0; i<2; i++)
-                    mQSv[i] += Sig_adj[t] * w_t[i] * w_t[2];
-                vSv += Sig_adj[t] * w_t[2] * w_t[2];
-                w_tm1[2] = w_t[2];
-            }
-            for (i=0; i<2; i++) {
-                for (j=0; j<=i; j++)
-                    quad_form[i][j] += Sig_adj[t] * w_t[i] * w_t[j];
-                w_tm1[i] = w_t[i];
+            else
+                Qi->m_tm1[1] += ((t==0) || (t==n-1)) ? Qi->q_1 : Qi->q_t;
+            p_expect(Qi->m_t, Qi->m_tm1, E1, E2, E3);
+
+            // Add term for e_t e_{t+1} product for tridiagonal cases
+            if (iQ < 3 && t<n-1) {
+                Qi->m_t[1] += Qi->Q_ttp * E1[0];
+                Qi->m_t[2] += Qi->Q_ttp * E1[1];
+                Qi->m_t[3] += Qi->Q_ttp * E1[2];
             }
         }
+
+        // Compute c_t^{(i,j)}(e_{t+1}) polynomials
+        for (iC = 0; iC < nC; iC++) {
+            C_term *Ci = &(C[iC]);
+            Q_term *Qi = &(Q[Ci->i]), *Qj = &(Q[Ci->j]);
+
+            // c_t^{(i,j)} = E[c_{t-1}^{i,j} | e_{t+1}] ...
+            p_expect(Ci->c_t, Ci->c_tm1, E1, E2, E3);
+            // ... + Cov[m_{t-1}^{(i)} + <z_i>, m_{t-1}^{(j)} + <z_j> | e_{t+1}],
+            // where <z_i> is z_t^{(i)} less the e_t e_{t+1} term, same for j
+            p_cov(Ci->c_t, Qi->m_tm1, Qj->m_tm1, V1, C12, V2);
+
+            // Add term for e_t e_{t+1} product in tridiagonal cases
+            if (iC < 5 && t < n-1) { // Qi is a tridiagonal quadratic form
+                double V1_e = Qi->Q_ttp * Qj->m_tm1[1];    // Coeff of e_{t+1} var[e_t]
+                double C12_e = Qi->Q_ttp * Qj->m_tm1[2];   // Coeff of e_{t+1} cov[e_t, e_t^2]
+                if (iC < 3) { // Qj is a tridiagonal quadratic form
+                    double V1_e2 = Qi->Q_ttp * Qj->Q_ttp;  // Coeff of e_{t+1} var[e_t^2]
+                    V1_e += Qi->m_tm1[1] * Qj->Q_ttp;
+                    C12_e += Qi->m_tm1[2] * Qj->Q_ttp;
+                    Ci->c_t[2] += V1_e2 * V1[0];
+                    Ci->c_t[3] += V1_e2 * V1[1];
+                }
+                Ci->c_t[1] += V1_e * V1[0] + C12_e * C12[0];
+                Ci->c_t[2] += V1_e * V1[1] + C12_e * C12[1];
+                Ci->c_t[3] += V1_e * V1[2] + C12_e * C12[2];
+            }
+            memcpy(Ci->c_tm1, Ci->c_t, p_len * sizeof(double));
+        }
+        dtm1 = dt;
+        dt = dtp1;
+        for (iQ = 0; iQ < nQ; iQ++)
+            memcpy(Q[iQ].m_tm1, Q[iQ].m_t, p_len * sizeof(double));
+    } // for(t=0; t<n-1; t++)
+
+    // To avoid double counting
+    dt_sum -= d1;
+    dt2_sum -= d1 * d1;
+    for (iQ = 0; iQ < 3; iQ++) {
+        // Compute constant part of quadratic forms
+        Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
+        Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum + Q[iQ].Q_ttp * dttp_sum;
+    }
+    // ... and linear forms.
+    for (iQ=3; iQ<nQ; iQ++) {
+        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
     }
 
-    var[0] = (2*(diag_tr + 2*off_diag_tr) + 4*mQSQm[0][0]) * 0.25 * omega * omega;
-    var[1] = var[3] = (2*eQSQe[1][0] + 4*mQSQm[1][0]) * -0.5 * omega * h;
-    var[4] = (2*eQSQe[1][1] + 4*mQSQm[1][1]) * h * h;
-    var[2] = var[6] = 2*mQSv[0] * -0.5 * omega * omega;
-    var[5] = var[7] = 2*mQSv[1] * omega * h;
-    var[8] = vSv * omega * omega;
+    // Flat indices for a 3 x 3 matrix, 2 x 2 matrix
+    // 0 1 2   0 1
+    // 3 4 5   2 3
+    // 6 7 8
 
-    mxFree(e);
-    mxFree(m);
-    mxFree(Sig_adj);
-    mxFree(mud_adj);
+    // Assign elements of expected gradient
+    grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
+    grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+    if (long_th) {
+        grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
+    }
+
+    // Assign elements of expected Hessian "Hess" and variance of gradient "var"
+    Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
+    var[0] = 0.25 * omega * omega * C[0].c_t[0];
+    if (long_th) {
+        Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+        Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
+        Hess[2] = Hess[6] = omega * (Q[3].qd + Q[3].m_t[0]);
+        Hess[5] = Hess[7] = omega * (Q[4].qd + Q[4].m_t[0]);
+        Hess[8] = -omega * (1-phi) * (n * (1-phi) + 2*phi);
+
+        var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
+        var[4] = 0.25 * omega * omega * C[2].c_t[0];
+        var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
+        var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
+        var[8] = omega * omega * C[5].c_t[0];
+    }
+    else {
+        Hess[1] = Hess[2] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
+        Hess[3] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
+
+        var[1] = var[2] = 0.25 * omega * omega * C[1].c_t[0];
+        var[3] = 0.25 * omega * omega * C[2].c_t[0];
+    }
+
 }
