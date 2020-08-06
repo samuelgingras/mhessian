@@ -47,17 +47,17 @@ postsim.omega  = zeros(ndraw,1);
 postsim.aPr_x  = zeros(ndraw,1);
 postsim.aPr_th = zeros(ndraw,1);
 
-% Initialize theta at prior mean for MCMC
+% Initialize theta structure at prior mean for MCMC
 theta.mu = prior.theta(3);
 theta.phi = tanh(prior.theta(2));
 theta.omega = exp(prior.theta(1));
 
-% Initialize hessian approximation
+% Initialize HESSIAN method approximation
 hmout = hessianMethod( model, y, theta );
 
 % Initialize state vector
 x = hmout.x;
-x0 = hmout.x_mode;
+xC = hmout.xC;
 
 % Unpack likelihood evaluations
 lnp_x = hmout.lnp_x;
@@ -72,7 +72,7 @@ for m = 1-burnin:ndraw
     % -------------------- %
 
     % Draw proposal xSt
-    hmout = hessianMethod( model, y, theta, 'GuessMode', x0 );
+    hmout = hessianMethod( model, y, theta, 'GuessMode', xC );
     xSt   = hmout.x;
     x0St  = hmout.x_mode;
 
@@ -129,8 +129,8 @@ for m = 1-burnin:ndraw
         theta.phi = tanh(thSt(2));
         theta.omega = exp(thSt(1));
 
-        % Update hessian approximation
-        hmout = hessianMethod( model, y, theta, 'GuessMode', x0, 'EvalAtState', x );
+        % Update HESSIAN method approximation
+        hmout = hessianMethod( model, y, theta, 'GuessMode', xC, 'EvalAtState', x );
 
         % Unpack likelihood evaluations
         lnp_x = hmout.lnp_x;

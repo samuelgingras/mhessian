@@ -1,4 +1,19 @@
-function [R, v, f] = prepare_proposal(g, mH, mV, g_prior, mH_prior)
+function [R, v, f] = prepare_proposal(n, g_prior, H_prior, q_theta)
+
+    % Unpack approximation
+    g = q_theta.grad;
+    H = q_theta.Hess;
+    V = q_theta.Var;
+
+    % Replicate grad_hess_approx1
+    H(1,1) = -n/2;
+    H(1,2) = 0;
+    H(2,1) = 0;
+    if( length(g) > 2 )
+        H(1,3) = 0;
+        H(3,1) = 0;
+    end
+
     % Parameters of proposal distribution
     h = 1.0;       % Step size
     theta = 0.0;   % Norton and Fox theta
@@ -6,7 +21,7 @@ function [R, v, f] = prepare_proposal(g, mH, mV, g_prior, mH_prior)
     z = 4;         % Parameter of limiter
     
     % Manipulation of g and H
-    mH = mH + mV + mH_prior;
+    mH = -H - V - H_prior;
     g = g + g_prior;
     
     % First make sure that matrix parameter is positive definite
