@@ -48,6 +48,7 @@ static inline void p_subtract(double *p, const double *p1, const double *p2)
         p[i] = p1[i] - p2[i];
 }
 
+// Polynomial multiplication followed by addition: p = p + p1 * p2
 static inline void p_mult_add(double *p, const double *p1, const double *p2)
 {
     p[0] += p1[0]*p2[0];
@@ -125,7 +126,8 @@ void compute_grad_Hess(
     // Output
     double *grad, // Vector, approximation of E[g_{x|\theta}(\theta)]
     double *Hess, // Matrix, approximation of E[H_{x|\theta)(\theta)]
-    double *var   // Matrix, approximation of Var[g_{x|\theta}(\theta)]
+    double *var,  // Matrix, approximation of Var[g_{x|\theta}(\theta)]
+    double *T     // 3D array of third derivatives
     )
 {
     int t, iQ, iC;
@@ -326,6 +328,11 @@ void compute_grad_Hess(
     // 3 4 5   2 3
     // 6 7 8
 
+    // Flat indices for a 3 x 3 x 3 array, 2 x 2 x 2 array
+    // 0 1 2   9 10 11  18 19 20    0 1  4 5
+    // 3 4 5  12 13 14  21 22 23    2 3  6 7
+    // 6 7 8  15 16 17  24 25 26
+
     // Assign elements of expected gradient
     grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
     grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
@@ -336,6 +343,7 @@ void compute_grad_Hess(
     // Assign elements of expected Hessian "Hess" and variance of gradient "var"
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
+    T[0] = Hess[0] + 3*var[0];
     if (long_th) {
         Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
         Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
@@ -348,6 +356,10 @@ void compute_grad_Hess(
         var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
         var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
         var[8] = omega * omega * C[5].c_t[0];
+
+        T[1] = T[3] = T[9] = Hess[1] + 3*var[1];
+        T[4] = T[10] = T[12] = Hess[4] + 2*var[4];
+        T[13] = 0.0;
     }
     else {
         Hess[1] = Hess[2] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
@@ -355,6 +367,10 @@ void compute_grad_Hess(
 
         var[1] = var[2] = 0.25 * omega * omega * C[1].c_t[0];
         var[3] = 0.25 * omega * omega * C[2].c_t[0];
+
+        T[1] = T[2] = T[4] = Hess[1] + 3*var[1];
+        T[3] = T[5] = T[6] = Hess[3] + 2*var[3];
+        T[7] = 0.0;
     }
 
 }

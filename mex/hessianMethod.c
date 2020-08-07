@@ -215,23 +215,28 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         // Create MATLAB output structure
         if( doGradHess ) {
 
-            int dim_th = long_th ? 3 : 2;
+            mwSize dim_th = long_th ? 3 : 2;
+            mwSize dims[3];
+            dims[0] = dims[1] = dims[2] = dim_th;
             mxArray *grad = mxCreateDoubleMatrix(dim_th, 1, mxREAL);
             mxArray *Hess = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
             mxArray *Var = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
+            mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
 
             // Compute gradHess approximation
-            compute_grad_Hess( long_th, state, theta, mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var) );
+            compute_grad_Hess( long_th, state, theta,
+                mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var), mxGetPr(T) );
 
             // Set field names
             const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y", "q_theta"};
-            const char *field_gradHess[] = {"grad", "Hess", "Var"};
+            const char *field_gradHess[] = {"grad", "Hess", "Var", "T"};
             
             // Create gradHess output structure
-            mxArray *q_theta = mxCreateStructMatrix(1, 1, 3, field_gradHess);
+            mxArray *q_theta = mxCreateStructMatrix(1, 1, 4, field_gradHess);
             mxSetField(q_theta, 0, "grad", grad);
             mxSetField(q_theta, 0, "Hess", Hess);
             mxSetField(q_theta, 0, "Var", Var);
+            mxSetField(q_theta, 0, "T", T);
 
 
             // Create MATLAB output structure
