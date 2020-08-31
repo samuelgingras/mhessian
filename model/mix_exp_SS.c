@@ -187,7 +187,6 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     double *lambda = theta_y->lambda_tm;
     
     *log_f = 0.0;
-    
     for(int t=0; t<n; t++)
         *log_f += log_f_y__theta_alpha_t(m, p, lambda, data->y[t], alpha[t]);
 }
@@ -232,7 +231,6 @@ void derivative(double y_t, double alpha_t, int m, double *p, double *lambda, do
     f_t[3] =  2.0 / z_3;
     f_t[4] = -6.0 / z_4;
     f_t[5] = 24.0 / z_5;
-    
     compute_Faa_di_Bruno(5, f_t, p_t, psi_t);
 }
 

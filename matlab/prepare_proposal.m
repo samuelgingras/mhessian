@@ -23,7 +23,7 @@ function [R, v, f] = prepare_proposal(n, g_prior, H_prior, q_theta)
     % Manipulation of g and H
     mH = -H - V - H_prior;
     g = g + g_prior;
-    
+        
     % First make sure that matrix parameter is positive definite
     [V,D] = eig(mH);
     D = max(sqrt(abs(D)), eye(size(mH)));
@@ -39,4 +39,5 @@ function [R, v, f] = prepare_proposal(n, g_prior, H_prior, q_theta)
     
     % Then compute multiplication factor
     f = (1 + 0.5*h*theta);
+    
 end

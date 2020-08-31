@@ -25,8 +25,10 @@ typedef struct {
     double lambda;
 
     double *p_tm;
+    double *cte_tm;
     double *mu_tm;
     double *sigma_tm;
+    double *kappa_tm;
     double *lambda_tm;
 } Parameter;
 

@@ -11,10 +11,11 @@ extern Observation_model student_SV;
 extern Observation_model poisson_SS;
 extern Observation_model gammapoisson_SS;
 extern Observation_model exp_SS;
-extern Observation_model mix_exp_SS;
 extern Observation_model gamma_SS;
 extern Observation_model weibull_SS;
 extern Observation_model gengamma_SS;
+extern Observation_model mix_exp_SS;
+extern Observation_model mix_gamma_SS;
 extern Observation_model regime_mix_exp_SS;
 extern Observation_model regime_mix_exp_SS_tobs;
 
@@ -71,7 +72,11 @@ Observation_model *assignModel(const mxArray *prhs)
     {
         model = &mix_exp_SS;
     }
-        else if( !strcmp(name, "gamma_SS") )
+    else if( !strcmp(name, "mix_gamma_SS") )
+    {
+        model = &mix_gamma_SS;
+    }
+    else if( !strcmp(name, "gamma_SS") )
     {
         model = &gamma_SS;
     }
