@@ -16,8 +16,9 @@ extern Observation_model weibull_SS;
 extern Observation_model gengamma_SS;
 extern Observation_model mix_exp_SS;
 extern Observation_model mix_gamma_SS;
-extern Observation_model regime_mix_exp_SS;
-extern Observation_model regime_mix_exp_SS_tobs;
+// extern Observation_model regime_mix_exp_SS;
+// extern Observation_model regime_mix_exp_SS_tobs;
+extern Observation_model flexible_SCD;
 
 Observation_model *assignModel(const mxArray *prhs)
 {
@@ -88,13 +89,17 @@ Observation_model *assignModel(const mxArray *prhs)
     {
         model = &gengamma_SS;
     }
-    else if( !strcmp(name, "regime_mix_exp_SS") )
+    // else if( !strcmp(name, "regime_mix_exp_SS") )
+    // {
+    //     model = &regime_mix_exp_SS;
+    // }
+    // else if( !strcmp(name, "regime_mix_exp_SS_tobs") )
+    // {
+    //     model = &regime_mix_exp_SS_tobs;
+    // }
+    else if( !strcmp(name, "flexible_SCD") )
     {
-        model = &regime_mix_exp_SS;
-    }
-    else if( !strcmp(name, "regime_mix_exp_SS_tobs") )
-    {
-        model = &regime_mix_exp_SS_tobs;
+        model = &flexible_SCD;
     }
     else
     {

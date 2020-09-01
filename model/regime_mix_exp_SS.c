@@ -113,17 +113,19 @@ void initializeData(const mxArray *prhs, Data *data)
             "Data: Incompatible vectors length.");
     
     // Fill in data structure
-    data->n = mxGetM(pr_y);             // Nb of observation
-    data->y = mxGetDoubles(pr_y);       // Observation vector
-    data->s = mxGetDoubles(pr_s);       // Regime indicator
+    data->n = mxGetM(pr_y);                                 // Nb of observation
+    data->y = mxGetDoubles(pr_y);                           // Observation vector
+    data->s = (int *) mxMalloc( data->n * sizeof(int) );    // Regime indicator
+
+    for( int t=0; t<data->n; t++ )
+        data->s[t] = (int) mxGetDoubles(pr_s)[t];       
 }
 
 static 
 double log_f_y__theta_alpha_t(int m, double *p , double *lambda, double y_t, double alpha_t)
 {
     double f_t = 0.0;
-    for(int j=0; j<m; j++)
-    {
+    for(int j=0; j<m; j++) {
         double g_jt = exp( -alpha_t - lambda[j] * exp(-alpha_t) * y_t );
         f_t += p[j] * lambda[j] * g_jt;
     }

@@ -7,10 +7,9 @@ typedef struct {
     int n;              // Nb of observation
     int m;              // Nb of state
     double *y;          // Vector of observations
-    
-    double *s;          // Latent indicator for regular/burst regime
-    double *k;          // State indicator
-    int *pos;           // Position of state (computed using state indicator)
+    int *s;             // Regime indicator
+    int *k;             // State indicator
+    int *p;             // Position of state (computed using state indicator)
 } Data;
 
 typedef struct {
