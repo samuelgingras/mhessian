@@ -16,6 +16,8 @@
 
 // Call for computation
 // hmout = hessianMethod( model, data, theta, ... )
+
+// Call for computation with diagnostics variables
 // [ hmout, state ] = hessianMethod( model, data, theta, ... )
 
 void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
@@ -77,10 +79,19 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         mxArray *lnp_x = mxCreateDoubleMatrix(1,1,mxREAL);
         mxArray *lnq_x = mxCreateDoubleMatrix(1,1,mxREAL);
 
+
+        // Compute diagnostics if two output arguments
+        // TODO: Update this option ...
+        if( nlhs == 2 ) {
+            state->compute_diagnostics = TRUE;  // Activate compute_diagnostics function
+            plhs[1] = mxState;                  // Return all computation by-product
+        }
+
+
         // (1) Find conditional mode and compute derivatives
         compute_alC_all(model, theta, state, data);
 
-        // (2) Parse options
+        // (2) Parse options (output options)
         int iter;                   // To parse pair of (opt, value)
         int isDraw = TRUE;          // Draw and Eval or Eval only
         int doGradHess = FALSE;     // Compute grad Hess approximation
@@ -199,9 +210,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxFree(opt);
         }
 
-        // TODO: Add DoDiagnostic option here
-        // ...
-
         // (3) Draw state and/or evaluate proposal log-likelihood
         draw_HESSIAN( isDraw, model, theta, state, data, mxGetPr(lnq_x) );
         
@@ -262,11 +270,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(plhs[0], 0, "lnp_x", lnp_x);
             mxSetField(plhs[0], 0, "lnq_x__y", lnq_x);
 
-        }
-
-        // Return mxState if second output argument
-        if( nlhs == 2 ) {
-            plhs[1] = mxState;  
         }
     }
 }

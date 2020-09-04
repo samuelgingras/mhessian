@@ -2,7 +2,7 @@
 %   HMOUT = hessianMethod(MODEL,DATA,THETA)
 % 
 %   [HMOUT, STATE] = hessianMethod(MODEL,DATA,THETA) returns the structure 
-%   of derivatives.
+%   of derivatives with diagnostics variables.
 % 
 %   [...] = hessianMethod(...,'EvalAtState',X) evaluate the HESSIAN
 %   approximation at the state vector X.

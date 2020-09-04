@@ -214,9 +214,17 @@ mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
         { "sddd", &(state->sddd) },
         { "eps", &(state->eps) },
         { "a", &(state->a) },
-        { "psi", &(state->psi) }
         // Diagnostic variables
-        // ...
+        { "psi2ratio", &(state->psi2ratio) },
+        { "h3norm", &(state->h3norm) },
+        { "h4norm", &(state->h4norm) },
+        { "h5norm", &(state->h5norm) },
+        { "psi3norm", &(state->psi3norm) },
+        { "psi4norm", &(state->psi4norm) },
+        { "psi5norm", &(state->psi5norm) },
+        { "s2priornorm", &(state->s2priornorm) },
+        // Matrix of derivatives
+        { "psi", &(state->psi) }
     };
     
     // Set state size and fixed options

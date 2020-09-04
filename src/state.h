@@ -113,7 +113,17 @@ typedef struct {
     double *psi;
     
     // Diagnostic variables
-    // ...
+    // Documented in compute_diagnostics function in alpha_univariate.c
+    int compute_diagnostics;
+    int fatal_error_detected;
+    double *psi2ratio;
+    double *h3norm;
+    double *h4norm;
+    double *h5norm;
+    double *psi3norm;
+    double *psi4norm;
+    double *psi5norm;
+    double *s2priornorm;
 } State;
 
 typedef struct {

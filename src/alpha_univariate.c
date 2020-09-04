@@ -12,6 +12,80 @@
 #define TRUE    1
 #define FALSE   0
 
+// --------------------------------------------------------------------------------------------- //
+// For diagnostic                                                                                //
+// --------------------------------------------------------------------------------------------- //
+
+/*
+ The following macro definitions are for reporting errors in HESSIAN method code.
+ The result of calling the verify macro is to report a Matlab warning, and pass control back to
+ Matlab as quickly as possible. We report a Matlab warning rather than an error, in order for
+ Matlab to return a structure containing information useful to track down the problem.
+ 
+ Example of using verify macro:
+ 
+    verify(isfinite(skew.z), "Draw of alpha_t is infinite or not a number", "t=%d, n=%d", t, n);
+ 
+ This should give a result such as:
+    Problem detected at line 278 of C source code file alpha_univariate.c, in function draw_HESSIAN
+    Iteration information: t=2390, n=2391
+    Problem: Draw of alpha_t is infinite or not a number
+ */
+
+#define MatlabWarningFormat \
+"Problem detected at line %d of C source code file %s, in function %s\n" \
+"Iteration information: %s\n" \
+"Problem: %s"
+static char iter_string[1000];
+// static int fatal_error_detected = FALSE;   // Add to state
+
+
+#define verify(condition, warn_string, iter_fmt_string, ...) \
+if (!(condition)) { \
+sprintf(iter_string, iter_fmt_string, __VA_ARGS__); \
+mexWarnMsgIdAndTxt("HESSIAN:generalError", MatlabWarningFormat, __LINE__, __FILE__, __func__, iter_string, warn_string); \
+}
+
+// fatal_error_detected = TRUE; \
+
+// The following code computes diagnostic values to help find efficiency problems. These values are not
+// used for any required computation.
+void compute_diagnostics(int t, State *state, Skew_parameters *skew)
+{
+    // sigma is 1 over the square root of minus the 2nd derivative of the approximation of the log
+    // conditional density of alpha_t given alpha_{t+1}, y_1, ..., y_t.
+    double sigma_m2 = -skew->h2;      // sigma^-2
+    double sigma_2 = 1.0 / sigma_m2;  // sigma^2
+    double sigma = sqrt(sigma_2);
+    double sigma_3 = sigma_2 * sigma; // sigma^3
+    double coeff = 0.0;
+    double *psi_t = state->psi + t*state->psi_stride;
+
+    // Contribution of contemporaneous observation to conditional precision
+    // Should be between zero and one.
+    // This is not necessarily a good measure of distortion as log f(y_t|alpha_t) could be close to quadratic
+    state->psi2ratio[t] = -psi_t[2] * sigma_2;
+    
+    // Change in log density for a positive one-sigma change in x attributable to ...
+    // (High absolute values indicate high levels of distortion, signs are meaningful.)
+    coeff = sigma_3 / 6.0;
+    state->h3norm[t] = skew->h3 * coeff;           // ... 3rd order term
+    state->psi3norm[t] = psi_t[3] * coeff;   // ... contemporaneous part of 3rd order term
+    coeff = sigma_2 * sigma_2 / 24.0;
+    state->h4norm[t] = skew->h4 * coeff;           // ... 4th order term
+    state->psi4norm[t] = psi_t[4] * coeff;   // ... contemporaneous part of 4th order term
+    coeff = sigma_3 * sigma_2 / 120.0;
+    state->h5norm[t] = skew->h5 * coeff;           // ... 5th order term
+    state->psi5norm[t] = psi_t[5] * coeff;   // ... contemporaneous part of 5th order term
+    
+    // Ratio of conditional prior variance to 1st order conditional posterior variance.
+    // Should be greater than 1, high values indicate high levels of distortion
+    state->s2priornorm[t] = state->Sigma_prior[t] * sigma_m2;
+}
+
+// --------------------------------------------------------------------------------------------- //
+// Computation                                                                                   //
+// --------------------------------------------------------------------------------------------- //
 
 void alpha_prior_draw( State_parameter *theta_alpha, double *alpha )
 {
@@ -265,38 +339,47 @@ static void alC_guess( State_parameter *theta_alpha, State *state )
     }
 }
 
-static 
+static
 void alC_pass_safe( State *state, double *inf_norm_distance )
 {
-	double lambda = 2.0; // Maximum multiple of prior standard deviation
-	double lambda2 = lambda * lambda;
+    double lambda = 2.0; // Maximum multiple of prior standard deviation
+    double lambda2 = lambda * lambda;
     int t, n = state->n;
-	double *alC = state->alC, *m = state->m, *ad = state->ad;
-	assert( !isnan(alC[n-1]) );
+    double *alC = state->alC, *m = state->m, *ad = state->ad;
+    
+    verify(isfinite(alC[n-1]),
+    "Value of x_mode_t is infinite or not a number", "t=%d, n=%d", n-1, n);
+    state->fatal_error_detected = !isfinite(alC[n-1]);
+    
     double diff = m[n-1] - alC[n-1];
     
-	if( diff*diff > lambda2 * state->Sigma[n-1] )
-		diff *= lambda * sqrt(state->Sigma_prior[n-1]) / fabs(diff);
-		
+    if( diff*diff > lambda2 * state->Sigma[n-1] )
+        diff *= lambda * sqrt(state->Sigma_prior[n-1]) / fabs(diff);
+    
     *inf_norm_distance = fabs(diff);
-	alC[n-1] += diff;
-	
+    alC[n-1] += diff;
+    
     for( t=n-2; t>=0; t-- )
     {
-		assert( !isnan(alC[t]) );
+        verify(isfinite(alC[t]),
+        "Value of x_mode_t is infinite or not a number", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !isfinite(alC[t]);
+        
         double old_alC_t = alC[t];
-		alC[t] = m[t] + ad[t] * alC[t+1];
+        alC[t] = m[t] + ad[t] * alC[t+1];
         diff = alC[t] - old_alC_t;
-      
-		if( diff*diff > lambda2 * state->Sigma_prior[t] )
+        
+        if( diff*diff > lambda2 * state->Sigma_prior[t] )
         {
-			diff *= lambda * sqrt(state->Sigma_prior[t]);
-			alC[t] = old_alC_t + diff;
-		}
+            diff *= lambda * sqrt(state->Sigma_prior[t]);
+            alC[t] = old_alC_t + diff;
+        }
         if( fabs(diff) > *inf_norm_distance )
-      	*inf_norm_distance = fabs(diff);
+        *inf_norm_distance = fabs(diff);
     }
-	assert( !isnan(*inf_norm_distance) );
+    verify(isfinite(*inf_norm_distance),
+    "Value of inf_norm_distance is infinite or not a number", "t=%d, n=%d", t, n);
+    state->fatal_error_detected = !isfinite(*inf_norm_distance);
 }
 
 static 
@@ -500,7 +583,10 @@ void compute_alC_all( Observation_model *model, Theta *theta, State *state, Data
     // At first trust_alC = TRUE by default
     if( !compute_alC( TRUE, FALSE, model, theta, state, data ) )
         compute_alC( FALSE, TRUE, model, theta, state, data );
-   
+    
+    // // Check fatal error (no error checking during compute_alC(...))
+    // if( state->fatal_error_detected ) return;
+
     make_Hbb_cbb( model, theta, state, data );
     compute_Sigma_m_plus( state );
     compute_derivatives( model, state, FALSE );
@@ -521,6 +607,7 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
     double threshold = 0.1;
     double K_1_threshold;
     double K_2_threshold[6];
+    const int max_n_reject = 100;
     
     
     /* Precomputation */
@@ -587,11 +674,31 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         skew.s2_prior = Sigma_prior[t];
         skew.u_sign = state->sign;
         skew.is_draw = isDraw;
+        skew.n_reject = 0;  // SG: need to be initialize for verify(..)
         skew.z = alpha[t];
         
         /* Draw/Eval */
         skew_draw_eval( &skew, sh, K_1_threshold, K_2_threshold );
-        assert( !isnan(skew.log_density) );
+
+        // Compute diagnostics
+        if( state->compute_diagnostics ) compute_diagnostics(t, state, &skew);
+        
+        verify(isfinite(skew.z),
+        "Draw of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !isfinite(skew.z);
+        
+        verify(isfinite(skew.log_density),
+        "Log density of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !isfinite(skew.log_density);
+        
+        verify(skew.n_reject < max_n_reject,
+        "Maximum number of skew rejects exceeded", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !(skew.n_reject < max_n_reject);
+        
+        // Check fatal error 
+        if( state->fatal_error_detected ) return;
+
+
         alpha[t] = skew.z;
         
         *log_q += skew.log_density;
