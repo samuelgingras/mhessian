@@ -683,21 +683,23 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         // Compute diagnostics
         if( state->compute_diagnostics ) compute_diagnostics(t, state, &skew);
         
-        verify(isfinite(skew.z),
-        "Draw of x_t is infinite or not a number", "t=%d, n=%d", t, n);
-        state->fatal_error_detected = !isfinite(skew.z);
-        
-        verify(isfinite(skew.log_density),
-        "Log density of x_t is infinite or not a number", "t=%d, n=%d", t, n);
-        state->fatal_error_detected = !isfinite(skew.log_density);
         
         verify(skew.n_reject < max_n_reject,
         "Maximum number of skew rejects exceeded", "t=%d, n=%d", t, n);
         state->fatal_error_detected = !(skew.n_reject < max_n_reject);
-        
-        // Check fatal error 
         if( state->fatal_error_detected ) return;
 
+        verify(isfinite(skew.z),
+        "Draw of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !isfinite(skew.z);
+        if( state->fatal_error_detected ) return;
+
+        verify(isfinite(skew.log_density),
+        "Log density of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        state->fatal_error_detected = !isfinite(skew.log_density);
+        if( state->fatal_error_detected ) return;
+
+        
 
         alpha[t] = skew.z;
         
