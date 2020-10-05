@@ -12,6 +12,10 @@
 #define TRUE    1
 #define FALSE   0
 
+// Original parameters
+#define MAX_N_REJECT  100    // Maximum number of rejection sampling rejections
+#define MAX_K         100    // Maximum value of K
+
 // --------------------------------------------------------------------------------------------- //
 // For diagnostic                                                                                //
 // --------------------------------------------------------------------------------------------- //
@@ -607,11 +611,10 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
     double threshold = 0.1;
     double K_1_threshold;
     double K_2_threshold[6];
-    const int max_n_reject = 100;
-    
-    
+
+        
     /* Precomputation */
-    Symmetric_Hermite *sh = symmetric_Hermite_alloc(100, 100); // Maximum value of K, maximum number of rejection sampling rejections
+    Symmetric_Hermite *sh = symmetric_Hermite_alloc(MAX_K, MAX_N_REJECT);
     K_1_threshold = sqrt(12.0 * threshold);
     K_2_threshold[2] = sqrt(2.0 * threshold);
     K_2_threshold[3] = exp( log(6.0 * threshold)/3.0 );
@@ -677,29 +680,28 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         skew.n_reject = 0;  // SG: need to be initialize for verify(..)
         skew.z = alpha[t];
         
-        /* Draw/Eval */
+        // Draw/Eval
         skew_draw_eval( &skew, sh, K_1_threshold, K_2_threshold );
 
         // Compute diagnostics
         if( state->compute_diagnostics ) compute_diagnostics(t, state, &skew);
         
         
-        verify(skew.n_reject < max_n_reject,
-        "Maximum number of skew rejects exceeded", "t=%d, n=%d", t, n);
-        state->fatal_error_detected = !(skew.n_reject < max_n_reject);
+        verify(skew.n_reject < MAX_N_REJECT,
+        "Maximum number of skew rejects exceeded", "t=%d, n=%d", t+1, n);
+        state->fatal_error_detected = !(skew.n_reject < MAX_N_REJECT);
         if( state->fatal_error_detected ) return;
 
         verify(isfinite(skew.z),
-        "Draw of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        "Draw of x_t is infinite or not a number", "t=%d, n=%d", t+1, n);
         state->fatal_error_detected = !isfinite(skew.z);
         if( state->fatal_error_detected ) return;
 
         verify(isfinite(skew.log_density),
-        "Log density of x_t is infinite or not a number", "t=%d, n=%d", t, n);
+        "Log density of x_t is infinite or not a number", "t=%d, n=%d", t+1, n);
         state->fatal_error_detected = !isfinite(skew.log_density);
         if( state->fatal_error_detected ) return;
 
-        
 
         alpha[t] = skew.z;
         

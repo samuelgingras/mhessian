@@ -5,19 +5,22 @@
 #include "state.h"
 #include "errors.h"
 
+// Stochastic Volatility models
 extern Observation_model gaussian_SV;
-extern Observation_model mix_gaussian_SV;
 extern Observation_model student_SV;
+extern Observation_model mix_gaussian_SV;
+
+// Dynamic count models
 extern Observation_model poisson_SS;
 extern Observation_model gammapoisson_SS;
+
+// Multiplicative Error models
 extern Observation_model exp_SS;
 extern Observation_model gamma_SS;
 extern Observation_model weibull_SS;
 extern Observation_model gengamma_SS;
 extern Observation_model mix_exp_SS;
 extern Observation_model mix_gamma_SS;
-// extern Observation_model regime_mix_exp_SS;
-// extern Observation_model regime_mix_exp_SS_tobs;
 extern Observation_model flexible_SCD;
 
 Observation_model *assignModel(const mxArray *prhs)
@@ -89,14 +92,6 @@ Observation_model *assignModel(const mxArray *prhs)
     {
         model = &gengamma_SS;
     }
-    // else if( !strcmp(name, "regime_mix_exp_SS") )
-    // {
-    //     model = &regime_mix_exp_SS;
-    // }
-    // else if( !strcmp(name, "regime_mix_exp_SS_tobs") )
-    // {
-    //     model = &regime_mix_exp_SS_tobs;
-    // }
     else if( !strcmp(name, "flexible_SCD") )
     {
         model = &flexible_SCD;

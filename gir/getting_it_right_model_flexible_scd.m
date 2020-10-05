@@ -8,17 +8,16 @@ hessianMethod(1234);
 % Simulation parameters
 ndraw  = 10^3;
 nblock = 1000;
-nstate = 5;
-kmax   = 3;
-kdata  = randi([1 kmax], nstate,1);
-ndata  = sum(kdata);
+ndata  = 10;
 
 % Set model parameters
 model = 'flexible_SCD';
 mu0 = 0.0;
-phi0 = 0.90;
-omega0 = 75;
+phi0 = 0.95;
+omega0 = 50;
 beta0 = [0.15; 0.45; 0.40];
+eta0 = 1.2;
+lambda0 = scale_flexible_scd( beta0, eta0 );
 
 % Set quantile for check implementation correctness
 Q = 0.1:0.1:0.9;
@@ -27,27 +26,23 @@ Q = 0.1:0.1:0.9;
 postsim.count1 = zeros(ndraw,length(Q));
 postsim.count2 = zeros(ndraw,length(Q));
 
-% Transition matrix for transform parameters 
-nmixture = length(beta0);
-T_p = transition_matrix_bmix(nmixture);
-T_lambda = (1:nmixture)' ./ (1:nmixture) * T_p;
-
 % Set theta structure for hessianMethod 
-theta.x.N = nstate;
+theta.x.N = ndata;
 theta.x.mu = mu0;
 theta.x.phi = phi0;
 theta.x.omega = omega0;
-theta.y.p = T_p * beta0;
-theta.y.lambda = T_lambda * beta0;
+theta.y.beta = beta0;
+theta.y.eta = eta0;
+theta.y.lambda = lambda0;
 
-% Initial draw of x
-x = drawState(theta);
-xrep = repelem(x, kdata);
+% Initial draw of (s,x,y)
+s = randsample( length(beta0), ndata, true, beta0 );
+x = drawState( theta );
+y = drawObs_flexible_scd( s, x, beta0, eta0, lambda0 );
 
 % Initialize data structure for hessianMethod with initial draw of y
-data.y = drawObs(xrep, 'mix_exp_SS', theta);
-data.k = repelem((1:nstate)', kdata);
-data.s = ones(ndata,1);
+data.y = y;
+data.s = s;
 
 % Evaluate initial draw (y,x)
 hmout = hessianMethod( model, data, theta, 'EvalAtState', x );
@@ -61,8 +56,8 @@ lnq_x__y = hmout.lnq_x__y;
 for m = 1:ndraw
 
     % New block: set counts at zeros
-    count1 = zeros(nstate,9);
-    count2 = zeros(nstate-1,9);
+    count1 = zeros(ndata,9);
+    count2 = zeros(ndata-1,9);
 
     % Simulate counts for block b
     for b = 1:nblock
@@ -85,9 +80,9 @@ for m = 1:ndraw
         lnH = lnH - lnp_y__x - lnp_x + lnq_x__y;
 
         % Accept/reject for xSt|y
-        if( rand < exp(lnH) )
+        aPr_x = min(1, exp(lnH));
+        if( rand < aPr_x )
             x = xSt;
-            xrep = repelem(x, kdata);
         end
 
         % -------------------- %
@@ -95,7 +90,7 @@ for m = 1:ndraw
         % -------------------- %
         
         % Draw y|x
-        data.y = drawObs( xrep, 'mix_exp_SS', theta );
+        data.y = drawObs_flexible_scd( s, x, beta0, eta0, lambda0 );
 
         % Update HESSIAN method approximation for new draw (y,x)
         hmout = hessianMethod( model, data, theta, 'EvalAtState', x );
@@ -111,7 +106,7 @@ for m = 1:ndraw
 
         % Normalized state vector
         z1 = (x - mu0) * sqrt(omega0*(1-phi0^2));
-        z2 = (x(2:nstate) - mu0 - phi0.*(x(1:nstate-1) - mu0)) * sqrt(omega0);
+        z2 = (x(2:end) - mu0 - phi0.*(x(1:end-1) - mu0)) * sqrt(omega0);
 
         % Update counts
         count1 = count1 + (z1 < norminv(Q,0,1));
