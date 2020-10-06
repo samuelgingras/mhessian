@@ -24,6 +24,7 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
     // Set pointer to field
     mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
     mxArray *pr_kappa = mxGetField( prhs, 0, "kappa" );
+    mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
     
     // Check for missing parameter
     if( pr_eta == NULL) 
@@ -34,19 +35,24 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Structure input: Field 'kappa' required.");
 
+    if( pr_lambda == NULL) 
+        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
+            "Structure input: Field 'lambda' required.");
+
     // Check parameter
-    if( !mxIsScalar(pr_eta) || !mxIsScalar(pr_kappa) )
+    if( !mxIsScalar(pr_eta) || !mxIsScalar(pr_kappa) || !mxIsScalar(pr_lambda) )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameters: Scalar parameters required.");
 
-    if( mxGetScalar(pr_eta) < 0.0 || mxGetScalar(pr_kappa) < 0.0 )
+    if( mxGetScalar(pr_eta) < 0.0 || mxGetScalar(pr_kappa) < 0.0 || mxGetScalar(pr_lambda) < 0.0 )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Model parameters: Positive parameters required.");
 
     // Read model parameter
     theta_y->eta = mxGetScalar(pr_eta);
     theta_y->kappa = mxGetScalar(pr_kappa);
-    theta_y->lambda = exp(lgamma(theta_y->kappa + 1/theta_y->eta) - lgamma(theta_y->kappa));
+    theta_y->lambda = mxGetScalar(pr_lambda);
+    // theta_y->lambda = exp(lgamma(theta_y->kappa + 1/theta_y->eta) - lgamma(theta_y->kappa));
 }
 
 static

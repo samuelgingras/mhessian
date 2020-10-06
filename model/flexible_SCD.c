@@ -117,13 +117,12 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     int *s = data->s;
     double *y = data->y;
 
-    *log_f = n * ( log(lambda) + log(eta) );
+    *log_f = n * ( log(eta) + eta * log(lambda) );
 
     for( int t=0; t<n; t++ ) {
         int k = s[t]-1;
         
-        double z_t = pow( y[t] * exp(-alpha[t]), eta );
-        double g_t = -lambda * z_t;
+        double g_t = -pow( lambda * y[t] * exp(-alpha[t]), eta );
         double f_t = log(1 - exp(g_t));
 
         *log_f += (eta-1) * log(y[t]) - eta * alpha[t];
@@ -151,8 +150,8 @@ void derivative(
     double f[6] = { 0.0 };
     double q[6] = { 0.0 };
 
-    // Step 1: Direct computation of g(x) = -lambda*(y*exp(-x))^eta
-    g[0] = -lambda * pow(y_t * exp(-alpha_t), eta);
+    // Step 1: Direct computation of g(x) = -(lambda*y*exp(-x))^eta
+    g[0] = -pow(lambda * y_t * exp(-alpha_t), eta);
     g[1] = -g[0] * eta;
     g[2] = -g[1] * eta;
     g[3] = -g[2] * eta;

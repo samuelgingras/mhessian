@@ -3,6 +3,6 @@ function y = drawObs_flexible_scd(s, x, beta, eta, lambda)
     y = zeros(n,1);
     for t=1:n
         u = betarnd(s(t), length(beta) - s(t) + 1);
-        y(t) = exp(x(t)) * (-log(1-u)/lambda)^(1/eta);
+        y(t) = (exp(x(t)) / lambda) * (-log(1-u))^(1/eta);
     end
 end
