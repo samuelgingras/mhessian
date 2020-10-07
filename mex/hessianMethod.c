@@ -80,6 +80,20 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         mxArray *lnq_x = mxCreateDoubleMatrix(1,1,mxREAL);
 
 
+        // (0) Parse options (computation and output options)
+        int iter;                   // To parse pair of (opt, value)
+        int isDraw = TRUE;          // Draw and Eval or Eval only
+        int isMarginal = TRUE;      // Marginal computation of derivatives and log likelihood
+        int doGradHess = FALSE;     // Compute grad Hess approximation
+        int long_th = TRUE;         // Size of theta for grad Hess
+
+
+        // Check pair input for options
+        if( (nrhs % 2) != 1  ) {
+            mexErrMsgIdAndTxt( "mhessian:hessianMethod:rhs", 
+                "Options: Pair of input by option required.");
+        }
+
         // Compute diagnostics if two output arguments
         // TODO: Update this option ...
         if( nlhs == 2 ) {
@@ -87,20 +101,30 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             plhs[1] = mxState;                  // Return all computation by-product
         }
 
+        // Check DataAugmentation option
+        for( iter=3; iter < nrhs; iter+=2 ) {
+            if( !mxIsChar(prhs[iter]) ) {
+                mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                    "Set options: String input required.");
+            }
 
-        // (1) Find conditional mode and compute derivatives
-        compute_alC_all(model, theta, state, data);
+            char *opt = mxArrayToString( prhs[iter] );
+            if( opt == NULL ) {
+                mexErrMsgIdAndTxt( "mhessian:hessianMethod:readingFailed",
+                    "Error reading computation option." );
+            }
 
-        // (2) Parse options (output options)
-        int iter;                   // To parse pair of (opt, value)
-        int isDraw = TRUE;          // Draw and Eval or Eval only
-        int doGradHess = FALSE;     // Compute grad Hess approximation
-        int long_th = TRUE;         // Size of theta for grad Hess
-
-
-        if( (nrhs % 2) != 1  ) {
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:rhs", 
-                "Options: Pair of input by option required.");
+            if( strcmp(opt, "DataAugmentation") == 0) {
+                if( !mxIsLogicalScalar(prhs[iter+1]) ) {
+                    mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+                        "EvalAtMode option: Logical scalar required.");
+                }
+                if( !mxIsLogicalScalarTrue(prhs[iter+1]) ) {
+                    isMarginal = FALSE;
+                    theta->y->is_marginal = isMarginal;
+                }
+            }
+            mxFree(opt);
         }
 
         // Check GuessMode option
@@ -130,6 +154,11 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             }
             mxFree(opt);
         }
+
+
+        // (1) Find conditional mode and compute derivatives
+        compute_alC_all(model, theta, state, data);
+
 
         // Check EvalAtState or EvalAtMode option
         for( iter=3; iter < nrhs; iter+=2 ) {

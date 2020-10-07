@@ -6,9 +6,11 @@ drawState(123);
 hessianMethod(1234);
 
 % Simulation parameters
-ndraw  = 10^3;
+ndraw  = 10^2;
 nblock = 1000;
 ndata  = 10;
+
+isMarginal = true;
 
 % Set model parameters
 model = 'flexible_SCD';
@@ -16,6 +18,7 @@ mu0 = 0.0;
 phi0 = 0.95;
 omega0 = 50;
 beta0 = [0.15; 0.45; 0.40];
+alpha0 = transition_matrix_bmix(length(beta0)) * beta0;
 eta0 = 1.2;
 lambda0 = scale_flexible_scd( beta0, eta0 );
 
@@ -32,6 +35,7 @@ theta.x.mu = mu0;
 theta.x.phi = phi0;
 theta.x.omega = omega0;
 theta.y.beta = beta0;
+theta.y.alpha = alpha0;
 theta.y.eta = eta0;
 theta.y.lambda = lambda0;
 
@@ -45,7 +49,7 @@ data.y = y;
 data.s = s;
 
 % Evaluate initial draw (y,x)
-hmout = hessianMethod( model, data, theta, 'EvalAtState', x );
+hmout = hessianMethod( model, data, theta, 'MarginalComputation', isMarginal, 'EvalAtState', x );
 
 % Unpack likelihood evaluations
 lnp_x = hmout.lnp_x;
@@ -67,7 +71,7 @@ for m = 1:ndraw
         % -------------------- %
 
         % Draw proposal xSt
-        hmout = hessianMethod( model, data, theta );
+        hmout = hessianMethod( model, data, theta, 'MarginalComputation', isMarginal );
         xSt   = hmout.x;
 
         % Unpack likelihood evaluations
@@ -90,10 +94,14 @@ for m = 1:ndraw
         % -------------------- %
         
         % Draw y|x
-        data.y = drawObs_flexible_scd( s, x, beta0, eta0, lambda0 );
+        if( isMarginal )
+            data.s = randsample( length(beta0), ndata, true, beta0 );
+        end
+        data.y = drawObs_flexible_scd( data.s, x, beta0, eta0, lambda0 );
 
         % Update HESSIAN method approximation for new draw (y,x)
-        hmout = hessianMethod( model, data, theta, 'EvalAtState', x );
+        hmout = hessianMethod( model, data, theta, ...
+            'MarginalComputation', isMarginal, 'EvalAtState', x );
 
         % Unpack likelihood evaluations
         lnp_x = hmout.lnp_x;

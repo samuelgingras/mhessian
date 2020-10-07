@@ -17,13 +17,15 @@ static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
-    mxArray *pr_p = mxGetField( prhs, 0, "beta" );
+    mxArray *pr_alpha = mxGetField( prhs, 0, "alpha" );
+    mxArray *pr_beta = mxGetField( prhs, 0, "beta" );
     mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
     mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
     
     // Set pointer to theta_y
-    theta_y->m = mxGetM(pr_p);
-    theta_y->p_tm = mxGetDoubles(pr_p);
+    theta_y->m = mxGetM(pr_alpha);
+    theta_y->p_tm = mxGetDoubles(pr_alpha);
+    theta_y->beta_tm = mxGetDoubles(pr_beta);
     theta_y->eta = mxGetScalar(pr_eta);
     theta_y->lambda = mxGetScalar(pr_lambda);
 
@@ -104,11 +106,23 @@ void initializeData(const mxArray *prhs, Data *data)
         data->s[t] = (int) mxGetDoubles(pr_s)[t];
 }
 
+
+static
+double log_f_y__theta_alpha_t(int m, double *p, double g_t)
+{
+    double f_t = 0.0;
+    for( int j=0; j<m; j++ )
+        f_t += p[j] * (j+1) * exp( (j+1) * g_t );
+
+    return log(f_t);
+}
+
 static 
 void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int m = theta_y->m;
-    double *beta = theta_y->p_tm;
+    double *p = theta_y->p_tm;
+    double *beta = theta_y->beta_tm;
     double *log_cte = theta_y->log_cte_tm;
     double eta = theta_y->eta;
     double lambda = theta_y->lambda;
@@ -120,14 +134,21 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     *log_f = n * ( log(eta) + eta * log(lambda) );
 
     for( int t=0; t<n; t++ ) {
-        int k = s[t]-1;
         
+        int k = s[t]-1;
         double g_t = -pow( lambda * y[t] * exp(-alpha[t]), eta );
         double f_t = log(1 - exp(g_t));
 
         *log_f += (eta-1) * log(y[t]) - eta * alpha[t];
-        *log_f += log(beta[k]) + log_cte[k] + (s[t]-1) * f_t + (m-s[t]+1) * g_t;
+
+        if( theta_y-> is_marginal )
+            *log_f += log_f_y__theta_alpha_t(m, p, g_t);
+        else
+            *log_f += log(beta[k]) + log_cte[k] + (s[t]-1) * f_t + (m-s[t]+1) * g_t;
+        
     }
+
+
 }
 
 static
@@ -138,9 +159,13 @@ void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 }
 
 static inline
-void derivative(
-    int m, double eta, double lambda, 
-    int s_t, double y_t, double alpha_t,
+void conditional_derivative(
+    int m,
+    double eta,
+    double lambda,
+    int s_t,
+    double y_t,
+    double alpha_t,
     double *psi_t
     )
 {
@@ -188,14 +213,73 @@ void derivative(
 }
 
 
+static inline
+void marginal_derivative(
+    int m,
+    double *p,
+    double eta,
+    double lambda,
+    double y_t,
+    double alpha_t,
+    double *psi_t
+    )
+{
+    double h[6] = { 0.0 };
+    double f[6] = { 0.0 };
+    double g[6] = { 0.0 };
+    double q[6] = { 0.0 };
+
+    // Step 1: Direct computation of g(x) = -(lambda * y * exp(-x))^eta
+    g[0] = -pow(lambda * y_t * exp(-alpha_t), eta);
+    g[1] = -g[0] * eta;
+    g[2] = -g[1] * eta;
+    g[3] = -g[2] * eta;
+    g[4] = -g[3] * eta;
+    g[5] = -g[4] * eta;
+
+
+    for( int j=0; j<m; j++ ) {
+
+        // Step 2: Faa di Bruno for f(x) = exp(j*g(x)) 
+        q[0] = exp((j+1)*g[0]);
+        q[1] = q[0] * (j+1);
+        q[2] = q[1] * (j+1);
+        q[3] = q[2] * (j+1);
+        q[4] = q[3] * (j+1);
+        q[5] = q[4] * (j+1);
+        compute_Faa_di_Bruno( 5, q, g, f );
+
+        // Step 3:  Direct computation of h(x) = sum_j (p_j * j) * f(x)
+        for( int d=0; d<6; d++ )
+            h[d] += p[j] * (j+1) * f[d];
+
+    }
+
+    // Step 4: Faa di Bruno for psi(x) = log(h(x))
+    q[0] = log(h[0]);
+    q[1] = 1/h[0];
+    q[2] = q[1] * q[1] * (-1.0);
+    q[3] = q[2] * q[1] * (-2.0);
+    q[4] = q[3] * q[1] * (-3.0);
+    q[5] = q[4] * q[1] * (-4.0);
+    compute_Faa_di_Bruno( 5, q, h, psi_t );
+
+    // Adjust first derivative for first element 
+    psi_t[1] -= eta;
+}
+
 static
 void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
 {
     int m =  theta->y->m;
+    double *p = theta->y->p_tm;
     double eta = theta->y->eta;
     double lambda = theta->y->lambda;
 
-    derivative( m, eta, lambda, data->s[t], data->y[t], alpha, psi_t );
+    if( theta->y->is_marginal )
+        marginal_derivative( m, p, eta, lambda, data->y[t], alpha, psi_t );
+    else
+        conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha, psi_t );
 }
 
 
@@ -204,6 +288,7 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     
     int m = theta->y->m;
+    double *p = theta->y->p_tm;
     double eta = theta->y->eta;
     double lambda = theta->y->lambda;
 
@@ -211,8 +296,14 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     double *alpha = state->alC;
     double *psi_t;
 
-    for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride )
-        derivative( m, eta, lambda, data->s[t], data->y[t], alpha[t], psi_t );
+    for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride ) {
+
+        if( theta->y->is_marginal )
+            marginal_derivative( m, p, eta, lambda, data->y[t], alpha[t], psi_t );
+        else
+            conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha[t], psi_t );
+            
+    }
 }
 
 
