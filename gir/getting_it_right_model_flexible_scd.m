@@ -10,8 +10,6 @@ ndraw  = 10^2;
 nblock = 1000;
 ndata  = 10;
 
-isMarginal = true;
-
 % Set model parameters
 model = 'flexible_SCD';
 mu0 = 0.0;
@@ -49,7 +47,7 @@ data.y = y;
 data.s = s;
 
 % Evaluate initial draw (y,x)
-hmout = hessianMethod( model, data, theta, 'MarginalComputation', isMarginal, 'EvalAtState', x );
+hmout = hessianMethod( model, data, theta, 'DataAugmentation', true, 'EvalAtState', x );
 
 % Unpack likelihood evaluations
 lnp_x = hmout.lnp_x;
@@ -71,7 +69,7 @@ for m = 1:ndraw
         % -------------------- %
 
         % Draw proposal xSt
-        hmout = hessianMethod( model, data, theta, 'MarginalComputation', isMarginal );
+        hmout = hessianMethod( model, data, theta, 'DataAugmentation', true );
         xSt   = hmout.x;
 
         % Unpack likelihood evaluations
@@ -94,14 +92,10 @@ for m = 1:ndraw
         % -------------------- %
         
         % Draw y|x
-        if( isMarginal )
-            data.s = randsample( length(beta0), ndata, true, beta0 );
-        end
         data.y = drawObs_flexible_scd( data.s, x, beta0, eta0, lambda0 );
 
         % Update HESSIAN method approximation for new draw (y,x)
-        hmout = hessianMethod( model, data, theta, ...
-            'MarginalComputation', isMarginal, 'EvalAtState', x );
+        hmout = hessianMethod( model, data, theta, 'DataAugmentation', true, 'EvalAtState', x );
 
         % Unpack likelihood evaluations
         lnp_x = hmout.lnp_x;

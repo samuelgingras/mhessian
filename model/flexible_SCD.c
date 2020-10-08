@@ -29,6 +29,8 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
     theta_y->eta = mxGetScalar(pr_eta);
     theta_y->lambda = mxGetScalar(pr_lambda);
 
+    theta_y->is_data_augmentation = 0;
+
     // Compute normalization constants
     theta_y->log_cte_tm = (double *) mxMalloc( (theta_y->m + 1) * sizeof(double) );
     double log_cte = lgamma(theta_y->m + 1);
@@ -106,17 +108,6 @@ void initializeData(const mxArray *prhs, Data *data)
         data->s[t] = (int) mxGetDoubles(pr_s)[t];
 }
 
-
-static
-double log_f_y__theta_alpha_t(int m, double *p, double g_t)
-{
-    double f_t = 0.0;
-    for( int j=0; j<m; j++ )
-        f_t += p[j] * (j+1) * exp( (j+1) * g_t );
-
-    return log(f_t);
-}
-
 static 
 void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
@@ -134,21 +125,20 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     *log_f = n * ( log(eta) + eta * log(lambda) );
 
     for( int t=0; t<n; t++ ) {
-        
-        int k = s[t]-1;
-        double g_t = -pow( lambda * y[t] * exp(-alpha[t]), eta );
-        double f_t = log(1 - exp(g_t));
-
-        *log_f += (eta-1) * log(y[t]) - eta * alpha[t];
-
-        if( theta_y-> is_marginal )
-            *log_f += log_f_y__theta_alpha_t(m, p, g_t);
-        else
+        double g_t = -pow( lambda * y[t] * exp(-alpha[t]), eta );        
+        if( theta_y-> is_data_augmentation ) {
+            int k = s[t]-1;
+            double f_t = log(1-exp(g_t));
             *log_f += log(beta[k]) + log_cte[k] + (s[t]-1) * f_t + (m-s[t]+1) * g_t;
-        
+        }
+        else {
+            double f_t = 0.0;
+            for( int j=0; j<m; j++ )
+                f_t += p[j] * (j+1) * exp( (j+1) * g_t );
+            *log_f += log(f_t);
+        }
+        *log_f += (eta-1) * log(y[t]) - eta * alpha[t];
     }
-
-
 }
 
 static
@@ -276,10 +266,11 @@ void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double
     double eta = theta->y->eta;
     double lambda = theta->y->lambda;
 
-    if( theta->y->is_marginal )
-        marginal_derivative( m, p, eta, lambda, data->y[t], alpha, psi_t );
-    else
+    if( theta->y->is_data_augmentation )
         conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha, psi_t );
+    else
+        marginal_derivative( m, p, eta, lambda, data->y[t], alpha, psi_t );
+        
 }
 
 
@@ -298,10 +289,10 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
 
     for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride ) {
 
-        if( theta->y->is_marginal )
-            marginal_derivative( m, p, eta, lambda, data->y[t], alpha[t], psi_t );
-        else
+        if( theta->y->is_data_augmentation )
             conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha[t], psi_t );
+        else
+            marginal_derivative( m, p, eta, lambda, data->y[t], alpha[t], psi_t );
             
     }
 }

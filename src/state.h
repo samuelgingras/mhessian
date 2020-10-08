@@ -25,7 +25,8 @@ typedef struct {
     double kappa;
     double lambda;
 
-    int is_marginal;    // True: marginal computation of derivatives and log_f 
+    int is_data_augmentation;
+    
     double *p_tm;
     double *beta_tm;
     double *mu_tm;

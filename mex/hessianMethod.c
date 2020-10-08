@@ -83,7 +83,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         // (0) Parse options (computation and output options)
         int iter;                   // To parse pair of (opt, value)
         int isDraw = TRUE;          // Draw and Eval or Eval only
-        int isMarginal = TRUE;      // Marginal computation of derivatives and log likelihood
         int doGradHess = FALSE;     // Compute grad Hess approximation
         int long_th = TRUE;         // Size of theta for grad Hess
 
@@ -119,10 +118,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "EvalAtMode option: Logical scalar required.");
                 }
-                if( !mxIsLogicalScalarTrue(prhs[iter+1]) ) {
-                    isMarginal = FALSE;
-                    theta->y->is_marginal = isMarginal;
-                }
+                theta->y->is_data_augmentation = mxIsLogicalScalarTrue(prhs[iter+1]);
             }
             mxFree(opt);
         }
