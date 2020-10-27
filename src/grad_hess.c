@@ -127,9 +127,15 @@ void compute_grad_Hess(
     double *grad, // Vector, approximation of E[g_{x|\theta}(\theta)]
     double *Hess, // Matrix, approximation of E[H_{x|\theta)(\theta)]
     double *var,  // Matrix, approximation of Var[g_{x|\theta}(\theta)]
-    double *T     // 3D array of third derivatives
+    // In following outputs d_t is defined as (x0_t - mu)
+    double *d1n_sum,     // (x0_1-mu) + (x0_n-mu)
+    double *dt_sum,      // (x0_2-mu) + ... + (x_{n-1}-mu)
+    double *d11nn_sum,   // (x0_1-mu)^2 + (x0_n-mu)^2
+    double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
+    double *dttp_sum     // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
     )
 {
+    double T[27];                   // For third derivative information
     int t, iQ, iC;
     int n = state->n;               // Number of observations
     double *x0 = state->alC;        // Mode
@@ -186,7 +192,12 @@ void compute_grad_Hess(
 
     // Variables for computing d statistics
     double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
-    double dt = d1, dtm1 = 0.0, dtp1 = 0.0, dt_sum = 0.0, dt2_sum = 0.0, dttp_sum = 0.0;
+    double dt = d1, dtm1 = 0.0, dtp1 = 0.0;
+    *dt_sum = 0.0;
+    *dtt_sum = 0.0;
+    *dttp_sum = 0.0;
+    *d1n_sum = d1 + dn;
+    *d11nn_sum = d1*d1 + dn*dn;
 
     for (t=0; t<n; t++) {
 
@@ -202,9 +213,9 @@ void compute_grad_Hess(
         double dt_2 = 2.0 * dt;
         if (t<n-1) {
             dtp1 = x0[t+1] - mu[t+1];
-            dttp_sum += dt * dtp1;
-            dt_sum += dt;
-            dt2_sum += dt * dt;
+            *dt_sum += dt;
+            *dtt_sum += dt * dt;
+            *dttp_sum += dt * dtp1;
 
             // Set E1, b
             E1[0] = mu0[t] - x0[t];    b[0] = b0[t] - x0[t];
@@ -311,16 +322,16 @@ void compute_grad_Hess(
     } // for(t=0; t<n-1; t++)
 
     // To avoid double counting
-    dt_sum -= d1;
-    dt2_sum -= d1 * d1;
+    *dt_sum -= d1;
+    *dtt_sum -= d1 * d1;
     for (iQ = 0; iQ < 3; iQ++) {
         // Compute constant part of quadratic forms
         Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
-        Q[iQ].dQd += Q[iQ].Q_tt * dt2_sum + Q[iQ].Q_ttp * dttp_sum;
+        Q[iQ].dQd += Q[iQ].Q_tt * *dtt_sum + Q[iQ].Q_ttp * *dttp_sum;
     }
     // ... and linear forms.
     for (iQ=3; iQ<nQ; iQ++) {
-        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
+        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * *dt_sum;
     }
 
     // Flat indices for a 3 x 3 matrix, 2 x 2 matrix
@@ -372,5 +383,4 @@ void compute_grad_Hess(
         T[3] = T[5] = T[6] = Hess[3] + 2*var[3];
         T[7] = 0.0;
     }
-
 }
