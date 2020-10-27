@@ -1,4 +1,3 @@
-
 #include <math.h>
 #include <string.h>
 #include "errors.h"
@@ -7,50 +6,36 @@
 #include "state.h"
 #include "faa_di_bruno.h"
 
-static int n_theta = 2;
+static int n_theta = 3;
 static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
 
 static char *usage_string =
-"Name: flexible_SCD\n"
-"Description: Discretized mixture of exponential duration with regime change\n"
-"Extra parameters: for j=1,...,J\n"
-"\tw_j\t Component weight of the jth exponential distribution\n"
-"\tlambda_j\t Shape parameter of the jth exponential distribution";
+"Name: flexible_SCD\n";
 
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // Set pointer to field
-    mxArray *pr_p = mxGetField( prhs, 0, "p" );
+    mxArray *pr_alpha = mxGetField( prhs, 0, "alpha" );
+    mxArray *pr_beta = mxGetField( prhs, 0, "beta" );
+    mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
     mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
     
-    // Check for missing parameters
-    if( pr_p == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'p' required.");
-
-    if( pr_lambda == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'lambda' required.");
-
-    // Check parameters
-    if( !mxIsDouble(pr_p) && mxGetN(pr_p) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Column vector of double required.");
-
-    if( !mxIsDouble(pr_lambda) && mxGetN(pr_lambda) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Column vector of double required.");
-    
-    if( mxGetM(pr_p) != mxGetM(pr_lambda) )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Incompatible vector length.");
-
     // Set pointer to theta_y
-    theta_y->m = mxGetM(pr_p);
-    theta_y->p_tm = mxGetDoubles(pr_p);
-    theta_y->lambda_tm = mxGetDoubles(pr_lambda);
+    theta_y->m = mxGetM(pr_alpha);
+    theta_y->p_tm = mxGetDoubles(pr_alpha);
+    theta_y->beta_tm = mxGetDoubles(pr_beta);
+    theta_y->eta = mxGetScalar(pr_eta);
+    theta_y->lambda = mxGetScalar(pr_lambda);
+
+    theta_y->is_data_augmentation = 0;
+
+    // Compute normalization constants
+    theta_y->log_cte_tm = (double *) mxMalloc( (theta_y->m + 1) * sizeof(double) );
+    double log_cte = lgamma(theta_y->m + 1);
+    for( int j=0; j<theta_y->m; j++ )
+        theta_y->log_cte_tm[j] = log_cte - lgamma(j + 1) - lgamma(theta_y->m - j);
 }
 
 static
@@ -89,7 +74,6 @@ void initializeData(const mxArray *prhs, Data *data)
     // Set pointer to field
     mxArray *pr_y = mxGetField( prhs, 0, "y" );
     mxArray *pr_s = mxGetField( prhs, 0, "s" );
-    mxArray *pr_k = mxGetField( prhs, 0, "k" );
     
     // Check for missing inputs
     if( pr_y == NULL )
@@ -99,10 +83,6 @@ void initializeData(const mxArray *prhs, Data *data)
     if( pr_s == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Data: Field 's' with regime index required.");
-
-    if( pr_k == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Data: Field 'k' with state index required.");
     
     // Check inputs
     if( !mxIsDouble(pr_y) && mxGetN(pr_y) != 1)
@@ -113,162 +93,184 @@ void initializeData(const mxArray *prhs, Data *data)
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Data: Column vectors of type double required.");
 
-    if( !mxIsDouble(pr_k) && mxGetN(pr_k) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Data: Column vectors of type double required.");
-
     if( mxGetM(pr_y) != mxGetM(pr_s) )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
             "Data: Incompatible vectors length.");
-
-    if( mxGetM(pr_y) != mxGetM(pr_k) )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Data: Incompatible vectors length.");
-    
-    
+        
     // Fill in data structure
     data->n = mxGetM(pr_y);                                     // Nb of observation
-    data->m = (int) mxGetDoubles(pr_k)[data->n-1];              // Nb of state
+    data->m = mxGetM(pr_y);                                     // Nb of state
     data->y = mxGetDoubles(pr_y);                               // Observation vector
-    data->s = (int *) mxMalloc( data->n * sizeof(int) );        // Regime indicator
-    data->k = (int *) mxMalloc( data->n * sizeof(int) );        // State indicator
-    data->p = (int *) mxMalloc( data->m * sizeof(int) );        // Position indicator
+    data->s = (int *) mxMalloc( data->n * sizeof(int) );        // Component indicator
 
-    int i,j,k_im1 = -1;
-    for( i=0, j=0; i<data->n; i++ ) {
-        data->s[i] = (int) mxGetDoubles(pr_s)[i];
-        data->k[i] = (int) mxGetDoubles(pr_k)[i] - 1;
-        if( k_im1 != data->k[i] ) {
-            data->p[j] = i;
-            k_im1 = data->k[i];
-            j++;
-        }
-    }
+    // Transform double to int (indicator)
+    for( int t=0; t<data->n; t++ )
+        data->s[t] = (int) mxGetDoubles(pr_s)[t];
 }
 
-
-static double log_f_y__theta_alpha_t(
-    int m,
-    double *p,
-    double *lambda,
-    double y_t,
-    double alpha_t
-    )
-{
-    double result = 0.0;
-    for( int j=0; j<m; j++ ) {
-        double g_jt = lambda[j] * exp( -lambda[j] * y_t * exp(-alpha_t) - alpha_t );
-        result += p[j] * g_jt;
-    }
-    return log(result);
-}
-
-static void log_f_y__theta_alpha(
-    double *alpha,
-    Parameter *theta_y,
-    Data *data,
-    double *log_f
-    )
+static 
+void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
 {
     int m = theta_y->m;
     double *p = theta_y->p_tm;
-    double *lambda = theta_y->lambda_tm;
+    double *beta = theta_y->beta_tm;
+    double *log_cte = theta_y->log_cte_tm;
+    double eta = theta_y->eta;
+    double lambda = theta_y->lambda;
     
-    *log_f = 0.0; 
-    for( int i=0; i<data->n; i++ ) {
-        if( data->s[i] )
-            *log_f += log_f_y__theta_alpha_t( m, p, lambda, data->y[i], alpha[data->k[i]] );
+    int n = data->n;
+    int *s = data->s;
+    double *y = data->y;
+
+    *log_f = n * ( log(eta) + eta * log(lambda) );
+
+    for( int t=0; t<n; t++ ) {
+        double g_t = -pow( lambda * y[t] * exp(-alpha[t]), eta );        
+        if( theta_y-> is_data_augmentation ) {
+            int k = s[t]-1;
+            double f_t = log(1-exp(g_t));
+            *log_f += log(beta[k]) + log_cte[k] + (s[t]-1) * f_t + (m-s[t]+1) * g_t;
+        }
+        else {
+            double f_t = 0.0;
+            for( int j=0; j<m; j++ )
+                f_t += p[j] * (j+1) * exp( (j+1) * g_t );
+            *log_f += log(f_t);
+        }
+        *log_f += (eta-1) * log(y[t]) - eta * alpha[t];
     }
 }
 
 static
 void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 {
-
+    // double u = rng_beta(a,b);
+    // double y = -log(1-u)/lambda;
 }
 
-static inline void derivative(
+static inline
+void conditional_derivative(
     int m,
-    double *p,
-    double *lambda,
+    double eta,
+    double lambda,
+    int s_t,
+    double y_t,
     double alpha_t,
-    int t,
-    Data *data,
     double *psi_t
     )
 {
-    
-    psi_t[1] = 0.0;
-    psi_t[2] = 0.0;
-    psi_t[3] = 0.0;
-    psi_t[4] = 0.0;
-    psi_t[5] = 0.0;
-    
-    // Get index of first and last observation conditional on alpha[t]
-    int start = data->p[t];
-    int end = ((t+1) < data->m) ? data->p[t+1] : data->n;
-
-    for( int i=start; i<end; i++ ) {
         
-        if( data->s[i] ) {
-            
-            double psi_it[6] = { 0.0 };
-            double h_jt[6] = { 0.0 };
-            double g_jt[6] = { 0.0 };
-            double f_it[6] = { 0.0 };
-            double q[6] = { 0.0 };
+    double h[6] = { 0.0 };
+    double g[6] = { 0.0 };
+    double f[6] = { 0.0 };
+    double q[6] = { 0.0 };
 
-            for( int j=0; j<m; j++ ) {
-                // Step 1: Direct computation
-                h_jt[3] = h_jt[5] = lambda[j] * data->y[i] * exp(-alpha_t);
-                h_jt[2] = h_jt[4] = -h_jt[3];
-                h_jt[1] = h_jt[3] - 1;
-                h_jt[0] = h_jt[2] - alpha_t;
+    // Step 1: Direct computation of g(x) = -(lambda*y*exp(-x))^eta
+    g[0] = -pow(lambda * y_t * exp(-alpha_t), eta);
+    g[1] = -g[0] * eta;
+    g[2] = -g[1] * eta;
+    g[3] = -g[2] * eta;
+    g[4] = -g[3] * eta;
+    g[5] = -g[4] * eta;
 
-                // Step 2: Faa di Bruno with composition q(x) = exp(x)
-                q[0] = exp(h_jt[0]);
-                q[1] = exp(h_jt[0]);
-                q[2] = exp(h_jt[0]);
-                q[3] = exp(h_jt[0]);
-                q[4] = exp(h_jt[0]);
-                q[5] = exp(h_jt[0]);
-                compute_Faa_di_Bruno(5, q, h_jt, g_jt);
+    // Step 2: Faa di Bruno for h(x) = 1-exp(g(x))
+    q[0] = 1-exp(g[0]);
+    q[1] = q[0]-1;
+    q[2] = q[1];
+    q[3] = q[1];
+    q[4] = q[1];
+    q[5] = q[1];
+    compute_Faa_di_Bruno( 5, q, g, h );
 
-                // Step 3: Direct computation
-                for( int d=0; d<6; d++ )
-                    f_it[d] += p[j] * lambda[j] * g_jt[d];
-            }
-            
-            // Step 2: Faa di Bruno with composition q(x) = log(x)
-            double z = f_it[0];
-            double z_2 = z * z;
-            double z_3 = z_2 * z;
-            double z_4 = z_3 * z;
-            double z_5 = z_4 * z;
-            
-            q[0] = log(z);
-            q[1] =  1.0 / z;
-            q[2] = -1.0 / z_2;
-            q[3] =  2.0 / z_3;
-            q[4] = -6.0 / z_4;
-            q[5] = 24.0 / z_5;
-            compute_Faa_di_Bruno(5, q, f_it, psi_it);
-            
-            // Step 3: Direct computation
-            for( int d=0; d<6; d++ )
-                psi_t[d] += psi_it[d];
-        }
-    }
+    // Step 3: Faa di Bruno with f(x) = log(h(x));
+    q[0] = log(h[0]);
+    q[1] = 1/h[0];
+    q[2] = q[1] * q[1] * (-1.0);
+    q[3] = q[2] * q[1] * (-2.0);
+    q[4] = q[3] * q[1] * (-3.0);
+    q[5] = q[4] * q[1] * (-4.0);
+    compute_Faa_di_Bruno( 5, q, h, f );
+    
+    // Step 4: Direct computation to add up derivatives
+    double a = s_t - 1;
+    double b = m - s_t + 1;
+
+    psi_t[1] = a * f[1] + b * g[1] - eta;
+    psi_t[2] = a * f[2] + b * g[2];
+    psi_t[3] = a * f[3] + b * g[3];
+    psi_t[4] = a * f[4] + b * g[4];
+    psi_t[5] = a * f[5] + b * g[5];
 }
 
 
-static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+static inline
+void marginal_derivative(
+    int m,
+    double *p,
+    double eta,
+    double lambda,
+    double y_t,
+    double alpha_t,
+    double *psi_t
+    )
 {
-    int m = theta->y->m;
+    double h[6] = { 0.0 };
+    double f[6] = { 0.0 };
+    double g[6] = { 0.0 };
+    double q[6] = { 0.0 };
+
+    // Step 1: Direct computation of g(x) = -(lambda * y * exp(-x))^eta
+    g[0] = -pow(lambda * y_t * exp(-alpha_t), eta);
+    g[1] = -g[0] * eta;
+    g[2] = -g[1] * eta;
+    g[3] = -g[2] * eta;
+    g[4] = -g[3] * eta;
+    g[5] = -g[4] * eta;
+
+
+    for( int j=0; j<m; j++ ) {
+
+        // Step 2: Faa di Bruno for f(x) = exp(j*g(x)) 
+        q[0] = exp((j+1)*g[0]);
+        q[1] = q[0] * (j+1);
+        q[2] = q[1] * (j+1);
+        q[3] = q[2] * (j+1);
+        q[4] = q[3] * (j+1);
+        q[5] = q[4] * (j+1);
+        compute_Faa_di_Bruno( 5, q, g, f );
+
+        // Step 3:  Direct computation of h(x) = sum_j (p_j * j) * f(x)
+        for( int d=0; d<6; d++ )
+            h[d] += p[j] * (j+1) * f[d];
+
+    }
+
+    // Step 4: Faa di Bruno for psi(x) = log(h(x))
+    q[0] = log(h[0]);
+    q[1] = 1/h[0];
+    q[2] = q[1] * q[1] * (-1.0);
+    q[3] = q[2] * q[1] * (-2.0);
+    q[4] = q[3] * q[1] * (-3.0);
+    q[5] = q[4] * q[1] * (-4.0);
+    compute_Faa_di_Bruno( 5, q, h, psi_t );
+
+    // Adjust first derivative for first element 
+    psi_t[1] -= eta;
+}
+
+static
+void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+{
+    int m =  theta->y->m;
     double *p = theta->y->p_tm;
-    double *lambda = theta->y->lambda_tm;
-    
-    derivative( m, p, lambda, alpha, t, data, psi_t );
+    double eta = theta->y->eta;
+    double lambda = theta->y->lambda;
+
+    if( theta->y->is_data_augmentation )
+        conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha, psi_t );
+    else
+        marginal_derivative( m, p, eta, lambda, data->y[t], alpha, psi_t );
+        
 }
 
 
@@ -278,14 +280,21 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     
     int m = theta->y->m;
     double *p = theta->y->p_tm;
-    double *lambda = theta->y->lambda_tm;
+    double eta = theta->y->eta;
+    double lambda = theta->y->lambda;
 
     int t, n = state->n;
     double *alpha = state->alC;
     double *psi_t;
 
-    for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride )
-        derivative( m, p, lambda, alpha[t], t, data, psi_t );
+    for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride ) {
+
+        if( theta->y->is_data_augmentation )
+            conditional_derivative( m, eta, lambda, data->s[t], data->y[t], alpha[t], psi_t );
+        else
+            marginal_derivative( m, p, eta, lambda, data->y[t], alpha[t], psi_t );
+            
+    }
 }
 
 
@@ -309,6 +318,7 @@ void initializeModel()
     
     flexible_SCD.draw_y__theta_alpha = draw_y__theta_alpha;
     flexible_SCD.log_f_y__theta_alpha = log_f_y__theta_alpha;
+
     flexible_SCD.compute_derivatives_t = compute_derivatives_t;
     flexible_SCD.compute_derivatives = compute_derivatives;
 }

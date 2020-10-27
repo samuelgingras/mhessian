@@ -7,6 +7,8 @@ typedef struct {
     int n;              // Nb of observation
     int m;              // Nb of state
     double *y;          // Vector of observations
+
+    int is_index;       // For data augmentation in mixture models
     int *s;             // Regime indicator
     int *k;             // State indicator
     int *p;             // Position of state (computed using state indicator)
@@ -23,12 +25,18 @@ typedef struct {
     double kappa;
     double lambda;
 
+    int is_data_augmentation;
+    
     double *p_tm;
-    double *cte_tm;
+    double *beta_tm;
     double *mu_tm;
     double *sigma_tm;
+    double *eta_tm;
     double *kappa_tm;
     double *lambda_tm;
+
+    double *cte_tm;
+    double *log_cte_tm;
 } Parameter;
 
 typedef struct {
