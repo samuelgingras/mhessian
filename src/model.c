@@ -8,7 +8,6 @@
 // Stochastic Volatility models
 extern Observation_model gaussian_SV;
 extern Observation_model student_SV;
-extern Observation_model mix_gaussian_SV;
 
 // Dynamic count models
 extern Observation_model poisson_SS;
@@ -19,8 +18,13 @@ extern Observation_model exp_SS;
 extern Observation_model gamma_SS;
 extern Observation_model weibull_SS;
 extern Observation_model gengamma_SS;
+
+// Finite mixture models
+extern Observation_model mix_gaussian_SV;
 extern Observation_model mix_exp_SS;
 extern Observation_model mix_gamma_SS;
+
+// Bernstein Transform mixture model
 extern Observation_model flexible_SCD;
 
 Observation_model *assignModel(const mxArray *prhs)
