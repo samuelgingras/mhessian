@@ -24,7 +24,12 @@ typedef struct {
 } C_term;
 
 void compute_grad_Hess(
-    int long_th, State *state, Theta *theta,            // Inputs
-    double *grad, double *Hess, double *Var, double *T  // Outputs
-    );
+    int long_th, State *state, Theta *theta,  // Inputs
+    double *grad, double *Hess, double *Var,  // Outputs
+    double *d1n_sum,     // (x0_1-mu) + (x0_n-mu)
+    double *dt_sum,      // (x0_2-mu) + ... + (x_{n-1}-mu)
+    double *d11nn_sum,   // (x0_1-mu)^2 + (x0_n-mu)^2
+    double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
+    double *dttp_sum     // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
+);
 #endif

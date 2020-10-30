@@ -254,22 +254,37 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxArray *grad = mxCreateDoubleMatrix(dim_th, 1, mxREAL);
             mxArray *Hess = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
             mxArray *Var = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
-            mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
+            mxArray *d1n_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            mxArray *dt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            mxArray *d11nn_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            mxArray *dtt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            mxArray *dttp_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            // Restore next line if implementinig 3rd derivative information
+            // mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
 
             // Compute gradHess approximation
             compute_grad_Hess( long_th, state, theta,
-                mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var), mxGetPr(T) );
+                mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var),
+                mxGetPr(d1n_sum), mxGetPr(dt_sum), mxGetPr(d11nn_sum), mxGetPr(dtt_sum), mxGetPr(dttp_sum) );
 
             // Set field names
             const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y", "q_theta"};
-            const char *field_gradHess[] = {"grad", "Hess", "Var", "T"};
+            const char *field_gradHess[] = {"grad", "Hess", "Var",
+                                            "d1n_sum", "dt_sum", "d11nn_sum", "dtt_sum", "dttp_sum"};
             
             // Create gradHess output structure
-            mxArray *q_theta = mxCreateStructMatrix(1, 1, 4, field_gradHess);
+            mxArray *q_theta = mxCreateStructMatrix(1, 1, 8, field_gradHess);
             mxSetField(q_theta, 0, "grad", grad);
             mxSetField(q_theta, 0, "Hess", Hess);
             mxSetField(q_theta, 0, "Var", Var);
-            mxSetField(q_theta, 0, "T", T);
+            mxSetField(q_theta, 0, "d1n_sum", d1n_sum);
+            mxSetField(q_theta, 0, "dt_sum", dt_sum);
+            mxSetField(q_theta, 0, "d11nn_sum", d11nn_sum);
+            mxSetField(q_theta, 0, "dtt_sum", dtt_sum);
+            mxSetField(q_theta, 0, "dttp_sum", dttp_sum);
+
+            // Restore next line if implementinig 3rd derivative information
+            // mxSetField(q_theta, 0, "T", T);
 
 
             // Create MATLAB output structure
