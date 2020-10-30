@@ -18,6 +18,7 @@ extern Observation_model exp_SS;
 extern Observation_model gamma_SS;
 extern Observation_model weibull_SS;
 extern Observation_model gengamma_SS;
+extern Observation_model burr_SS;
 
 // Finite mixture models
 extern Observation_model mix_gaussian_SV;
@@ -95,6 +96,10 @@ Observation_model *assignModel(const mxArray *prhs)
     else if( !strcmp(name, "gengamma_SS") )
     {
         model = &gengamma_SS;
+    }
+    else if( !strcmp(name, "burr_SS") )
+    {
+        model = &burr_SS;
     }
     else if( !strcmp(name, "flexible_SCD") )
     {
