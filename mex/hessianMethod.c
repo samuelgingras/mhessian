@@ -259,7 +259,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxArray *d11nn_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
             mxArray *dtt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
             mxArray *dttp_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            // Restore next line if implementinig 3rd derivative information
+            // Restore next line if implementing 3rd derivative information
             // mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
 
             // Compute gradHess approximation
@@ -283,7 +283,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(q_theta, 0, "dtt_sum", dtt_sum);
             mxSetField(q_theta, 0, "dttp_sum", dttp_sum);
 
-            // Restore next line if implementinig 3rd derivative information
+            // Restore next line if implementing 3rd derivative information
             // mxSetField(q_theta, 0, "T", T);
 
 
