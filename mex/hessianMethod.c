@@ -259,21 +259,23 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxArray *d11nn_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
             mxArray *dtt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
             mxArray *dttp_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
+            mxArray *g_cum = mxCreateDoubleMatrix(state->n, 5, mxREAL);
             // Restore next line if implementinig 3rd derivative information
             // mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
 
             // Compute gradHess approximation
             compute_grad_Hess( long_th, state, theta,
                 mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var),
-                mxGetPr(d1n_sum), mxGetPr(dt_sum), mxGetPr(d11nn_sum), mxGetPr(dtt_sum), mxGetPr(dttp_sum) );
+                mxGetPr(d1n_sum), mxGetPr(dt_sum), mxGetPr(d11nn_sum), mxGetPr(dtt_sum), mxGetPr(dttp_sum),
+                mxGetPr(g_cum) );
 
             // Set field names
             const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y", "q_theta"};
             const char *field_gradHess[] = {"grad", "Hess", "Var",
-                                            "d1n_sum", "dt_sum", "d11nn_sum", "dtt_sum", "dttp_sum"};
+                                            "d1n_sum", "dt_sum", "d11nn_sum", "dtt_sum", "dttp_sum", "g_cum"};
             
             // Create gradHess output structure
-            mxArray *q_theta = mxCreateStructMatrix(1, 1, 8, field_gradHess);
+            mxArray *q_theta = mxCreateStructMatrix(1, 1, 9, field_gradHess);
             mxSetField(q_theta, 0, "grad", grad);
             mxSetField(q_theta, 0, "Hess", Hess);
             mxSetField(q_theta, 0, "Var", Var);
@@ -282,6 +284,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(q_theta, 0, "d11nn_sum", d11nn_sum);
             mxSetField(q_theta, 0, "dtt_sum", dtt_sum);
             mxSetField(q_theta, 0, "dttp_sum", dttp_sum);
+            mxSetField(q_theta, 0, "g_cum", g_cum);
 
             // Restore next line if implementinig 3rd derivative information
             // mxSetField(q_theta, 0, "T", T);
