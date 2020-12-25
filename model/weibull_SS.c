@@ -103,8 +103,7 @@ void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     double scale = 1/theta_y->lambda;
     double shape = 1/theta_y->eta;
 
-    for(int t=0; t<n; t++)
-    {
+    for( int t=0; t<n; t++ ) {
         double u = rng_exp(1);
         data->y[t] = exp(alpha[t]) * scale * pow(u,shape);
     }

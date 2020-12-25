@@ -21,6 +21,8 @@ typedef struct {
 
     double r;
     double nu;
+    double alpha;
+    double beta;
     double eta;
     double kappa;
     double lambda;

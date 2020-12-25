@@ -286,7 +286,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(q_theta, 0, "dttp_sum", dttp_sum);
             mxSetField(q_theta, 0, "g_cum", g_cum);
 
-            // Restore next line if implementinig 3rd derivative information
+            // Restore next line if implementing 3rd derivative information
             // mxSetField(q_theta, 0, "T", T);
 
 

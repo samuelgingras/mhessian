@@ -132,7 +132,9 @@ void compute_grad_Hess(
     double *dt_sum,      // (x0_2-mu) + ... + (x_{n-1}-mu)
     double *d11nn_sum,   // (x0_1-mu)^2 + (x0_n-mu)^2
     double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
-    double *dttp_sum     // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
+    double *dttp_sum,    // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
+    // Output to implement cumulative gradient computations
+    double *g_cum
     )
 {
     double T[27];                   // For third derivative information
@@ -155,7 +157,6 @@ void compute_grad_Hess(
     double *mu = theta->alpha->mu_tm;       // Prior mean of x, as a vector
     double phi = theta->alpha->phi;         // Autocorrelation parameter of x_t process
     double omega = theta->alpha->omega;     // Innovation precision parameter of x_t process
-
 
     int nQ = long_th ? 5 : 3;
     int nC = long_th ? 6 : 3;
@@ -189,6 +190,32 @@ void compute_grad_Hess(
         {1, 3, {0.0}, {0.0}},  // 4, for Cov[e^\top Q_2 e, q e]
         {3, 3, {0.0}, {0.0}}   // 5  for Var[q e]
     };
+
+    // Forward pass to get g_cum
+    double x_bar = 0.0;
+    for (t=0; t<n; t++)
+        x_bar += x0[t];
+    x_bar /= n;
+    double Etp = (mu0[n-1] - x0[n-1]), Vtp = Sigma[n-1];
+    double deltp = Etp + x0[n-1] - x_bar;
+    g_cum[n-1] = (1-phi*phi) * Vtp;
+    g_cum[2*n-1] = phi * Vtp;
+    g_cum[3*n-1] = (1-phi*phi) * deltp * deltp;
+    g_cum[4*n-1] = phi * deltp * deltp;
+    g_cum[5*n-1] = Vtp;
+    for (t=n-2; t>=0; t--) {
+        double Et = (mu0[t] - x0[t]) + mud[t] * Etp;
+        double EVttp = Sigma[t] * (1 + sd[t]*Etp);
+        double Vt = EVttp + mud[t]*mud[t] * Vtp;
+        double mud_phi = mud[t] - phi;
+        g_cum[t] = EVttp + mud_phi*mud_phi * Vtp;
+        g_cum[t+n] = mud_phi * Vtp;
+        double delt = Et + x0[t] - x_bar;
+        g_cum[t+2*n] = pow(delt - phi*deltp, 2);
+        g_cum[t+3*n] = (delt - phi*deltp) * deltp;
+        g_cum[t+4*n] = Vt;
+        Etp = Et; Vtp = Vt; deltp = delt;
+    }
 
     // Variables for computing d statistics
     double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
@@ -286,6 +313,9 @@ void compute_grad_Hess(
                 Qi->m_t[3] += Qi->Q_ttp * E1[2];
             }
         }
+        //g_cum[t] = Q[0].m_t[0];
+        //g_cum[t+n] = Q[1].m_t[0];
+        //g_cum[t+2*n] = Q[3].m_t[0];
 
         // Compute c_t^{(i,j)}(e_{t+1}) polynomials
         for (iC = 0; iC < nC; iC++) {
