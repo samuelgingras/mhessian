@@ -1,7 +1,7 @@
 function [lnp_th, lnp_th_g, lnp_th_H] = GaBeN_log_prior_eval(hyper, theta)
 
 	[v1, g1, H11] = Ga_sigma2(exp(-theta.th(1)), hyper.Ga_al, hyper.Ga_be);
-	[v2, g2, H22] = Be_phi(tanh(theta(2)), hyper.Be_al, hyper.Be_be);
+	[v2, g2, H22] = Be_phi(tanh(theta.th(2)), hyper.Be_al, hyper.Be_be);
 	u = theta.th(3) - hyper.N_mu;
 	g3 = -hyper.N_h * u;
 	H33 = -hyper.N_h;
