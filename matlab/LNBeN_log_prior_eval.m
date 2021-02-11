@@ -2,12 +2,18 @@ function [lnp_th, lnp_th_g, lnp_th_H] = LNBeN_log_prior_eval(hyper, theta)
 
 	[v1, g1, H11] = LN_sigma(exp(-0.5*theta.th(1)), hyper.LN_mu, hyper.LN_h);
 	[v2, g2, H22] = Be_phi(tanh(theta.th(2)), hyper.Be_al, hyper.Be_be);
-	u = theta.th(3) - hyper.N_mu;
-	g3 = -hyper.N_h * u;
-	H33 = -hyper.N_h;
-	lnp_th = v1 + v2 - 0.5 * hyper.N_h * u^2;
-	lnp_th_g = [g1; g2; g3];
-	lnp_th_H = diag([H11; H22; H33]);
+	if hyper.has_mu
+		u = theta.th(3) - hyper.N_mu;
+		g3 = -hyper.N_h * u;
+		H33 = -hyper.N_h;
+		lnp_th = v1 + v2 - 0.5 * hyper.N_h * u^2;
+		lnp_th_g = [g1; g2; g3];
+		lnp_th_H = diag([H11; H22; H33]);
+	else
+		lnp_th = v1 + v2;
+		lnp_th_g = [g1; g2];
+		lnp_th_H = diag([H11; H22]);
+	end
 end
 
 function [lnf, dlnf_dth, d2lnf_dth2] = LN_sigma(sigma, mu, h)

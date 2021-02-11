@@ -7,7 +7,12 @@ function [new_theta, new_hmout, draw_log] = ...
     lnp_thSt = log_prior_eval(prior, thetaSt);
 
     % Draw xSt|thSt
-    hmoutSt = hessianMethod(model, y, thetaSt, 'GradHess', 'Long');
+    if prior.hyper.has_mu
+        th_length_string = 'Long';
+    else
+        th_length_string = 'Short';
+    end
+    hmoutSt = hessianMethod(model, y, thetaSt, 'GradHess', th_length_string);
     
     % Skip proposal if fail to draw state
     if( ~any(isnan(hmout.x)) )
