@@ -23,28 +23,32 @@ function [lnq_thSt, varargout] = ...
 	H = H_y + H_prior;
 
 	% Compute (WJM: new H12_post correction)
-	phi = tanh(th(2));
-	gth_grad = [1; -2*(1+phi)];
-	gth_Hess = [1, -2*(1+phi); -2*(1+phi), 2*(1+phi)*(1+3*phi)];
-	gth_opg = gth_grad * gth_grad';
-	h_bar = -H_prior(3, 3);
-	h_bar2_diff2 = h_bar^2 * (g_prior(3)/h_bar + g(3)/H_y(3, 3));
-	lambda_g = -H_y(3, 3);
-	coeff_opg = 0.5 * lambda_g^2 / (h_bar + lambda_g)^2;
-	coeff_opg = coeff_opg + h_bar2_diff2 * lambda_g^2 / (h_bar + lambda_g)^3;
-	term_opg = coeff_opg * gth_opg;
-	coeff_Hess = -0.5 * lambda_g / (h_bar + lambda_g);
-	coeff_Hess = coeff_Hess - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
-	term_Hess = coeff_Hess * gth_Hess;
-	coeff_grad = -0.5 * lambda_g / (h_bar + lambda_g);
-	coeff_grad = coeff_grad - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
-	term_grad = coeff_grad * gth_grad;
+	if long_th
+		phi = tanh(th(2));
+		gth_grad = [1; -2*(1+phi)];
+		gth_Hess = [1, -2*(1+phi); -2*(1+phi), 2*(1+phi)*(1+3*phi)];
+		gth_opg = gth_grad * gth_grad';
+		h_bar = -H_prior(3, 3);
+		h_bar2_diff2 = h_bar^2 * (g_prior(3)/h_bar + g(3)/H_y(3, 3));
+		lambda_g = -H_y(3, 3);
+		coeff_opg = 0.5 * lambda_g^2 / (h_bar + lambda_g)^2;
+		coeff_opg = coeff_opg + h_bar2_diff2 * lambda_g^2 / (h_bar + lambda_g)^3;
+		term_opg = coeff_opg * gth_opg;
+		coeff_Hess = -0.5 * lambda_g / (h_bar + lambda_g);
+		coeff_Hess = coeff_Hess - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
+		term_Hess = coeff_Hess * gth_Hess;
+		coeff_grad = -0.5 * lambda_g / (h_bar + lambda_g);
+		coeff_grad = coeff_grad - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
+		term_grad = coeff_grad * gth_grad;
 
-	g12_prior = g_prior(1:2);
-	g12_post = q_theta.grad(1:2);
-	g12 = g12_prior + g12_post;
-	H12_prior = H_prior(1:2, 1:2);
-	H12_post = H_y(1:2, 1:2);
+		g12_prior = g_prior(1:2);
+		g12_post = q_theta.grad(1:2);
+		g12 = g12_prior + g12_post;
+		H12_prior = H_prior(1:2, 1:2);
+		H12_post = H_y(1:2, 1:2);
+	end
+	g12 = g_prior(1:2) + q_theta.grad(1:2);
+	
 	if long_th
 		%H12_post = H12_post - 0.5*(1+g(3)^2/H_y(3,3)) * gth_Hess;
 		%g12_post = g12_post - 0.5*(1+g(3)^2/H_y(3,3)) * gth_grad;
