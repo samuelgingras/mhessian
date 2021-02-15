@@ -30,6 +30,7 @@ void compute_grad_Hess(
     double *dt_sum,      // (x0_2-mu) + ... + (x_{n-1}-mu)
     double *d11nn_sum,   // (x0_1-mu)^2 + (x0_n-mu)^2
     double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
-    double *dttp_sum     // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
+    double *dttp_sum,    // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
+    double *g_cum        // m_t terms for each 
 );
 #endif

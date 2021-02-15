@@ -1,25 +1,37 @@
-function [v, g, H] = log_prior(prior, theta)	
+function [v, g, H] = log_prior(prior, th)	
 	switch prior.type
 		case 'GaBeN'
-			[v1, g1, H11] = Ga_sigma2(exp(-theta(1)), prior.Ga_al, prior.Ga_be);
-			[v2, g2, H22] = Be_phi(tanh(theta(2)), prior.Be_al, prior.Be_be);
-			u = theta(3) - prior.N_mu;
-			g3 = -prior.N_h * u;
-			H33 = -prior.N_h;
-			v = v1 + v2 - 0.5 * prior.N_h * u^2;
-			g = [g1; g2; g3];
-			H = diag([H11; H22; H33]);
+			[v1, g1, H11] = Ga_sigma2(exp(-th(1)), prior.Ga_al, prior.Ga_be);
+			[v2, g2, H22] = Be_phi(tanh(th(2)), prior.Be_al, prior.Be_be);
+			if prior.has_mu
+				u = th(3) - prior.N_mu;
+				g3 = -prior.N_h * u;
+				H33 = -prior.N_h;
+				v = v1 + v2 - 0.5 * prior.N_h * u^2;
+				g = [g1; g2; g3];
+				H = diag([H11; H22; H33]);
+			else
+				v = v1 + v2;
+				g = [g1; g2; g3];
+				H = diag([H11; H22]);
+			end
 		case 'LNBeN'
-			[v1, g1, H11] = LN_sigma(exp(-0.5*theta(1)), prior.LN_mu, prior.LN_h);
-			[v2, g2, H22] = Be_phi(tanh(theta(2)), prior.Be_al, prior.Be_be);
-			u = theta(3) - prior.N_mu;
-			g3 = -prior.N_h * u;
-			H33 = -prior.N_h;
-			v = v1 + v2 - 0.5 * prior.N_h * u^2;
-			g = [g1; g2; g3];
-			H = diag([H11; H22; H33]);
+			[v1, g1, H11] = LN_sigma(exp(-0.5*th(1)), prior.LN_mu, prior.LN_h);
+			[v2, g2, H22] = Be_phi(tanh(th(2)), prior.Be_al, prior.Be_be);
+			if prior.has_mu
+				u = th(3) - prior.N_mu;
+				g3 = -prior.N_h * u;
+				H33 = -prior.N_h;
+				v = v1 + v2 - 0.5 * prior.N_h * u^2;
+				g = [g1; g2; g3];
+				H = diag([H11; H22; H33]);
+			else
+				v = v1 + v2;
+				g = [g1; g2; g3];
+				H = diag([H11; H22]);
+			end
 		case 'MVN'
-			u = prior.R * (theta - prior.theta);
+			u = prior.R * (th - prior.mean);
 			v = -0.5*(u'*u);
 			g = -(prior.R'*u);
 			H = prior.H;
