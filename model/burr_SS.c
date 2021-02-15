@@ -120,7 +120,7 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     
     for( int t=0; t<n; t++ ) {
         double u = rng_rand();
-        double v = exp(-shape_kappa * log(1-u));
+        double v = pow( 1/(1-u), shape_kappa );
         data->y[t] = exp(alpha[t]) * scale_lambda * pow( v-1, shape_eta );
     }
 }
@@ -137,16 +137,16 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
     for( int t=0; t<n; t++ ) {
         double z = lambda * data->y[t] * exp(-alpha[t]);
         double z_eta = pow( z, eta );
-        *log_f += (eta-1) * log(data->y[t]) - eta * alpha[t] - (kappa+1) * log(1+z_eta);
+        *log_f += (eta-1) * log(data->y[t]) - eta * alpha[t] - (kappa+1) * log1p(z_eta);
     }
 }
 
 static inline 
 void derivative(double eta, double kappa, double lambda, double y_t, double alpha_t, double *psi_t)
 {   
-    double h[6] = { 0.0 };
-    double g[6] = { 0.0 };
-    double q[6] = { 0.0 };
+    double g[6];
+    double h[6];
+    double q[6];
 
     // Step 1: Direct computation h(x) = (lambda * y * exp(-x))^eta;
     h[0] = pow( lambda * y_t * exp(-alpha_t), eta );
@@ -156,7 +156,7 @@ void derivative(double eta, double kappa, double lambda, double y_t, double alph
     h[4] = -h[3] * eta;
     h[5] = -h[4] * eta;
 
-    // Step 2: Faa Di Bruno g(x) = q(h(x)) with q(x) = log(1+x);
+    // Step 2a: Faa Di Bruno g(x) = q(h(x)) with q(x) = log(1+x);
     double z = 1+h[0];
     double z_inv = 1/z;
     q[0] = log(z);
@@ -167,12 +167,12 @@ void derivative(double eta, double kappa, double lambda, double y_t, double alph
     q[5] = q[4] * z_inv * (-4.0);
     compute_Faa_di_Bruno( 5, q, h, g );
 
-    // Step 3: Direct computation of psi(x) = -eta*x - (kappa+1)*g(x)
-    psi_t[1] = -(kappa+1)*g[1] - eta;
-    psi_t[2] = -(kappa+1)*g[2];
-    psi_t[3] = -(kappa+1)*g[3];
-    psi_t[4] = -(kappa+1)*g[4];
-    psi_t[5] = -(kappa+1)*g[5];
+    // Step 2b: Direct computation of psi(x) = -eta*x - (kappa+1)*g(x)
+    psi_t[1] = -(kappa+1) * g[1] - eta;
+    psi_t[2] = -(kappa+1) * g[2];
+    psi_t[3] = -(kappa+1) * g[3];
+    psi_t[4] = -(kappa+1) * g[4];
+    psi_t[5] = -(kappa+1) * g[5];
 
 }
 

@@ -5,8 +5,8 @@
 #include "errors.h"
 #include "RNG.h"
 
-// drawSample( seed )
-// y = drawSample( x, model, theta )
+// drawObs( seed )
+// y = drawObs( x, model, theta )
 
 void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 {

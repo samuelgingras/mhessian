@@ -16,9 +16,10 @@ typedef struct {
 
 typedef struct {
     int n;              // Nb of scalar
-    int m;              // Nb of mixture
     double *scalar;
 
+    int m;              // Nb of mixture
+    
     double r;
     double nu;
     double alpha;
@@ -39,6 +40,10 @@ typedef struct {
 
     double *cte_tm;
     double *log_cte_tm;
+
+    double *q_tm;
+    int *k_tm;
+    
 } Parameter;
 
 typedef struct {

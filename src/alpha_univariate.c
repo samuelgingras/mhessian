@@ -34,7 +34,7 @@
     Problem detected at line 278 of C source code file alpha_univariate.c, in function draw_HESSIAN
     Iteration information: t=2390, n=2391
     Problem: Draw of alpha_t is infinite or not a number
- */
+*/
 
 #define MatlabWarningFormat \
 "Problem detected at line %d of C source code file %s, in function %s\n" \
@@ -88,7 +88,7 @@ void compute_diagnostics(int t, State *state, Skew_parameters *skew)
 }
 
 // --------------------------------------------------------------------------------------------- //
-// Computation                                                                                   //
+// Computation: Prior sampling and log density evaluation                                        //
 // --------------------------------------------------------------------------------------------- //
 
 void alpha_prior_draw( State_parameter *theta_alpha, double *alpha )
@@ -165,6 +165,7 @@ void alpha_prior_eval( State_parameter *theta_alpha, double *alpha, double *log_
         *log_p = 0.5 * (log_det - n*log(2*M_PI) - result);
     }
 }
+
 
 static 
 void make_Hb_cb( State_parameter *theta_alpha, State *state )
@@ -545,7 +546,7 @@ void compute_derivatives( Observation_model *model, State *state, int ad_add_onl
 	ad[n-1] = add[n-1] = addd[n-1] = adddd[n-1] = 0.0;
 }
 
-static 
+ 
 int compute_alC( int trust_alC, int safe, Observation_model *model, Theta *theta, State *state, Data *data )
 {
     int iteration;
@@ -613,7 +614,7 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
     double K_2_threshold[6];
 
         
-    /* Precomputation */
+    /* Pre-computation */
     Symmetric_Hermite *sh = symmetric_Hermite_alloc(MAX_K, MAX_N_REJECT);
     K_1_threshold = sqrt(12.0 * threshold);
     K_2_threshold[2] = sqrt(2.0 * threshold);
