@@ -1,10 +1,22 @@
 function [lnq_thSt, varargout] = ...
 	theta_draw_eval(prior, theta, q_theta, varargin)
 
+	% See if 
+	if( isfield(theta,'x') )
+		is_simple = false;
+		old_theta = theta;
+		theta = theta.x;
+	else
+		is_simple = true;
+	end
+
 	% See if thetaSt (theta star) needs to be drawn (is_draw) or not.
-	if nargin == 4 && nargout == 1
+    if nargin == 4 && nargout == 1
 		is_draw = false;
 		thetaSt = varargin{1};
+		if( ~is_simple )
+			thetaSt = thetaSt.x;
+		end
 		thSt = thetaSt.th;
 	elseif nargin == 3 && nargout == 2
 		is_draw = true;
@@ -12,6 +24,7 @@ function [lnq_thSt, varargout] = ...
 		error("Incorrect combination of number of inputs and outputs");
     end
     long_th = prior.hyper.has_mu;
+
 
 	[v_prior, g_prior, H_prior] = log_prior_eval(prior, theta);
 	th = theta.th;
@@ -96,8 +109,23 @@ function [lnq_thSt, varargout] = ...
 		uSt = R_eps'\(thSt(1:2) - thSt12_mean);
 	end
 
+	% Implement reflection sampling
+	thSt2_cond_mean = thSt12_mean(2) + ...
+		(Sigma_eps(1, 2) / Sigma_eps(1, 1)) * (thSt(1) - thSt12_mean(1));
+	x = (thSt(2) - thSt2_cond_mean);
+	H_222 = -6*phi*q_theta.Hess(2, 2);
+	H_222 = -2*(3*phi^2+1) * q_theta.Hess(1, 2) - 6*phi*q_theta.Hess(2, 2);
+	H_222 = H_222 + q_theta.cov_Q1Q2;
+	odd = H_222 * x^3 / 6;
+	odd = sign(odd) * min(abs(odd), 0.75);
+	if is_draw & (rand < -odd)
+		thSt(2) = 2*thSt2_cond_mean - thSt(2);
+		odd = -odd;
+	end
+
 	% Compute log density (up to normalization constant) at thSt.
 	lnq_thSt = -log(det(R_eps)) - 0.5*(uSt'*uSt);
+	lnq_thSt = lnq_thSt + log(1 + odd);
 
 	% Conditional draw/eval of th3St given thSt
 	if long_th
@@ -130,6 +158,17 @@ function [lnq_thSt, varargout] = ...
 		thetaSt.phi = tanh(thSt(2));
 		if long_th
 			thetaSt.mu = thSt(3);
+		end
+
+		if( ~is_simple )
+			tmp.x = thetaSt;
+			fields = fieldnames(old_theta);
+			for f=1:length(fields)
+				if( ~strcmp(fields{f},'x') )
+					tmp.(fields{f}) = old_theta.(fields{f});
+				end
+			end
+			thetaSt = tmp;
 		end
 		varargout{1} = thetaSt;
 	end

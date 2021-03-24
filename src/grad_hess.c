@@ -134,7 +134,9 @@ void compute_grad_Hess(
     double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
     double *dttp_sum,    // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
     // Output to implement cumulative gradient computations
-    double *g_cum
+    double *g_cum,
+    // Output to implement third derivative stuff
+    double *cov_Q1Q2
     )
 {
     double T[27];                   // For third derivative information
@@ -159,19 +161,19 @@ void compute_grad_Hess(
     double omega = theta->alpha->omega;     // Innovation precision parameter of x_t process
 
     int nQ = long_th ? 5 : 3;
-    int nC = long_th ? 6 : 3;
+    int nC = long_th ? 7 : 3; // Was 6 : 3. Need to put (1,2) as 4th, not 7th C
 
     // Polynomials for conditional moments of e_t given e_{t+1}
     double b[p_len] = {0}, delta[p_len] = {0}, S[p_len] = {0};   // Given
     double b_2[p_len], S2[p_len], E12[p_len];  // Intermediate polynomials
     double E1[p_len], E2[p_len], E3[p_len], C12[p_len], V1[p_len], V2[p_len]; // Direct moments
 
-    // Initialization: store non-redundant elements of constant matrices Q, Q_2, and Q_{22}
+    // Initialization: store non-redundant elements of constant matrices Q, Q', and Q''
     // and vectors q and q_2.
     // ------------------------------------------------------------------------------------
-    Q_term Q[5] = {0}; // Information about Q, Q_2, Q_{22}, q, q_2
+    Q_term Q[5] = {0}; // Information about Q, Q', Q'', q, q'
 
-    // Set elements (1, 1), (t, t), (t, t+1) of the matrices Q, Q_2 and Q_{22}
+    // Set elements (1, 1), (t, t), (t, t+1) of the matrices Q, Q' and Q''
     Q[0].Q_11 = 1.0;  Q[0].Q_tt = 1+phi*phi;                    Q[0].Q_ttp = -2*phi;
     Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -2*(1-phi*phi);
     Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 4*phi*(1-phi*phi);
@@ -182,13 +184,14 @@ void compute_grad_Hess(
 
     // (i, j) coordinates for each of six required covariances
     // The covariance fields c_tm1 and c_t are set to zero
-    C_term C[6] = {
+    C_term C[7] = {
         {0, 0, {0.0}, {0.0}},  // 0, for Var[e^\top Q e]
-        {0, 1, {0.0}, {0.0}},  // 1, for Cov[e^\top Q e, e^\top Q_2 e]
-        {1, 1, {0.0}, {0.0}},  // 2, for Var[e^\top Q_2 e]
+        {0, 1, {0.0}, {0.0}},  // 1, for Cov[e^\top Q e, e^\top Q' e]
+        {1, 1, {0.0}, {0.0}},  // 2, for Var[e^\top Q' e]
         {0, 3, {0.0}, {0.0}},  // 3, for Cov[e^\top Q e, q e]
-        {1, 3, {0.0}, {0.0}},  // 4, for Cov[e^\top Q_2 e, q e]
-        {3, 3, {0.0}, {0.0}}   // 5  for Var[q e]
+        {1, 3, {0.0}, {0.0}},  // 4, for Cov[e^\top Q' e, q e]
+        {3, 3, {0.0}, {0.0}},  // 5, for Var[q e]
+        {1, 2, {0.0}, {0.0}}   // 6, for Cov[e^\top Q'e, e^\top Q''e]
     };
 
     // Forward pass to get g_cum
@@ -380,6 +383,7 @@ void compute_grad_Hess(
     if (long_th) {
         grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
     }
+    cov_Q1Q2[0] = 0.25 * omega * omega * C[6].c_t[0];
 
     // Assign elements of expected Hessian "Hess" and variance of gradient "var"
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
@@ -395,12 +399,15 @@ void compute_grad_Hess(
         var[1] = var[3] = 0.25 * omega * omega * C[1].c_t[0];
         var[4] = 0.25 * omega * omega * C[2].c_t[0];
         var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
-        var[5] = var[7]= -0.5 * omega * omega * C[4].c_t[0];
+        var[5] = var[7] = -0.5 * omega * omega * C[4].c_t[0];
         var[8] = omega * omega * C[5].c_t[0];
 
         T[1] = T[3] = T[9] = Hess[1] + 3*var[1];
         T[4] = T[10] = T[12] = Hess[4] + 2*var[4];
-        T[13] = 0.0;
+        T[13] = -2*(3*phi*phi+1)*Hess[1] - 6*phi*Hess[4] + 0.25 * omega * omega * C[6].c_t[0];
+        T[14] = -2*(3*phi*phi+1)*Hess[1];
+        T[15] = -6*phi*Hess[4];
+        T[16] = 0.25 * omega * omega * C[6].c_t[0];
     }
     else {
         Hess[1] = Hess[2] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
@@ -411,6 +418,6 @@ void compute_grad_Hess(
 
         T[1] = T[2] = T[4] = Hess[1] + 3*var[1];
         T[3] = T[5] = T[6] = Hess[3] + 2*var[3];
-        T[7] = 0.0;
+        T[7] = -2*(3*phi*phi+1) * Hess[1] - 6*phi*Hess[3] + 0.25 * omega * omega * C[6].c_t[0];
     }
 }

@@ -1,7 +1,6 @@
 function [new_theta, new_hmout, draw_log] = ...
     joint_draw_update(model, prior, theta, hmout, y, draw_log)
 
-
     % Draw thSt
     [lnq_thSt, thetaSt] = theta_draw_eval(prior, theta, hmout.q_theta);
     lnp_thSt = log_prior_eval(prior, thetaSt);
