@@ -96,8 +96,23 @@ function [lnq_thSt, varargout] = ...
 		uSt = R_eps'\(thSt(1:2) - thSt12_mean);
 	end
 
+	% Implement reflection sampling
+	thSt2_cond_mean = thSt12_mean(2) + ...
+		(Sigma_eps(1, 2) / Sigma_eps(1, 1)) * (thSt(1) - thSt12_mean(1));
+	x = (thSt(2) - thSt2_cond_mean);
+	H_222 = -6*phi*q_theta.Hess(2, 2);
+	H_222 = -2*(3*phi^2+1) * q_theta.Hess(1, 2) - 6*phi*q_theta.Hess(2, 2);
+	H_222 = H_222 + q_theta.cov_Q1Q2;
+	odd = H_222 * x^3 / 6;
+	odd = sign(odd) * min(abs(odd), 0.75);
+	if is_draw & (rand < -odd)
+		thSt(2) = 2*thSt2_cond_mean - thSt(2);
+		odd = -odd;
+	end
+
 	% Compute log density (up to normalization constant) at thSt.
 	lnq_thSt = -log(det(R_eps)) - 0.5*(uSt'*uSt);
+	lnq_thSt = lnq_thSt + log(1 + odd);
 
 	% Conditional draw/eval of th3St given thSt
 	if long_th
