@@ -26,7 +26,8 @@ extern Observation_model mix_exp_SS;
 extern Observation_model mix_gamma_SS;
 
 // Bernstein Transform mixture model
-extern Observation_model flexible_SCD;
+extern Observation_model flexible_SCD;      // Generalized Gamma
+extern Observation_model flexible_SCD_v2;   // Burr
 
 Observation_model *assignModel(const mxArray *prhs)
 {
@@ -104,6 +105,10 @@ Observation_model *assignModel(const mxArray *prhs)
     else if( !strcmp(name, "flexible_SCD") )
     {
         model = &flexible_SCD;
+    }
+    else if( !strcmp(name, "flexible_SCD_v2") )
+    {
+        model = &flexible_SCD_v2;
     }
     else
     {

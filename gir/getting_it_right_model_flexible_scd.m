@@ -10,6 +10,10 @@ ndraw  = 10^2;
 nblock = 1000;
 ndata  = 10;
 
+% Set observation model
+model = 'flexible_SCD_v2';
+is_data_augmentation = true;
+
 % Set model parameters
 mu0 = 0.0;
 phi0 = 0.95;
@@ -40,14 +44,15 @@ theta.y.alpha = table_beta_scd(length(beta0)) * beta0;
 % Initial draw of (s,x,y)
 s = randsample( length(beta0), ndata, true, beta0 );
 x = drawState( theta );
-y = drawObs_flexible_scd( s, x, beta0, eta0, kappa0, lambda0 );
+y = drawObs_fscd( model, s, x, beta0, eta0, kappa0, lambda0 );
 
 % Initialize data structure for hessianMethod with initial draw of y
 data.y = y;
 data.s = s;
 
 % Evaluate initial draw (y,x)
-hmout = hessianMethod( 'flexible_SCD', data, theta, 'EvalAtState', x );
+hmout = hessianMethod( model, data, theta, 'EvalAtState', x, ...
+    'DataAugmentation', is_data_augmentation );
 
 % Unpack likelihood evaluations
 lnp_x = hmout.lnp_x;
@@ -69,9 +74,9 @@ for m = 1:ndraw
         % -------------------- %
 
         % Draw proposal xSt
-        hmout = hessianMethod( 'flexible_SCD', data, theta );
-        xSt   = hmout.x;
-
+        hmout = hessianMethod( model, data, theta, ...
+            'DataAugmentation', is_data_augmentation );
+        
         % Unpack likelihood evaluations
         lnp_xSt = hmout.lnp_x;
         lnp_y__xSt = hmout.lnp_y__x;
@@ -84,7 +89,7 @@ for m = 1:ndraw
         % Accept/reject for xSt|y
         aPr_x = min(1, exp(lnH));
         if( rand < aPr_x )
-            x = xSt;
+            x = hmout.x;
         end
 
         % -------------------- %
@@ -92,11 +97,14 @@ for m = 1:ndraw
         % -------------------- %
         
         % Draw y|x
-        s = randsample( length(beta0), ndata, true, beta0 );
-        data.y = drawObs_flexible_scd( s, x, beta0, eta0, kappa0, lambda0 );
+        if( ~is_data_augmentation )
+            data.s = randsample( length(beta0), ndata, true, beta0 );
+        end
+        data.y = drawObs_fscd( model, data.s, x, beta0, eta0, kappa0, lambda0 );
 
         % Update HESSIAN method approximation for new draw (y,x)
-        hmout = hessianMethod( 'flexible_SCD', data, theta, 'EvalAtState', x );
+        hmout = hessianMethod( model, data, theta, 'EvalAtState', x, ...
+            'DataAugmentation', is_data_augmentation );
 
         % Unpack likelihood evaluations
         lnp_x = hmout.lnp_x;

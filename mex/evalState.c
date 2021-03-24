@@ -17,7 +17,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     
     // Allocate memory and initialize state parameters
     Theta *theta = thetaAlloc();
-    initializeThetaAlpha( prhs[1], theta->alpha );
+    initializeThetaAlpha( mxGetField( prhs[1], 0, 'x' ), theta->alpha );
     
     // Check state vector
     if( !mxIsDouble(prhs[0]) )

@@ -116,7 +116,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             if( strcmp(opt, "DataAugmentation") == 0) {
                 if( !mxIsLogicalScalar(prhs[iter+1]) ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                        "EvalAtMode option: Logical scalar required.");
+                        "Data Augmentation option: Logical scalar required.");
                 }
                 theta->y->is_data_augmentation = mxIsLogicalScalarTrue(prhs[iter+1]);
             }

@@ -238,7 +238,7 @@ mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
     for(i=0; i<nfield; i++)
         field_names[i] = field[i].Matlab_field_name;
     
-    // Prepare matlab structure mxState
+    // Prepare MATLAB structure mxState
     mxArray *field_pr;
     mxArray *mxState = mxCreateStructMatrix(1,1,nfield,field_names);
     for(i=0; i<nfield-1; i++){
