@@ -1,10 +1,22 @@
 function [lnq_thSt, varargout] = ...
 	theta_draw_eval(prior, theta, q_theta, varargin)
 
+	% See if 
+	if( isfield(theta,'x') )
+		is_simple = false;
+		old_theta = theta;
+		theta = theta.x;
+	else
+		is_simple = true;
+	end
+
 	% See if thetaSt (theta star) needs to be drawn (is_draw) or not.
-	if nargin == 4 && nargout == 1
+    if nargin == 4 && nargout == 1
 		is_draw = false;
 		thetaSt = varargin{1};
+		if( ~is_simple )
+			thetaSt = thetaSt.x;
+		end
 		thSt = thetaSt.th;
 	elseif nargin == 3 && nargout == 2
 		is_draw = true;
@@ -12,6 +24,7 @@ function [lnq_thSt, varargout] = ...
 		error("Incorrect combination of number of inputs and outputs");
     end
     long_th = prior.hyper.has_mu;
+
 
 	[v_prior, g_prior, H_prior] = log_prior_eval(prior, theta);
 	th = theta.th;
@@ -130,6 +143,17 @@ function [lnq_thSt, varargout] = ...
 		thetaSt.phi = tanh(thSt(2));
 		if long_th
 			thetaSt.mu = thSt(3);
+		end
+
+		if( ~is_simple )
+			tmp.x = thetaSt;
+			fields = fieldnames(old_theta);
+			for f=1:length(fields)
+				if( ~strcmp(fields{f},'x') )
+					tmp.(fields{f}) = old_theta.(fields{f});
+				end
+			end
+			thetaSt = tmp;
 		end
 		varargout{1} = thetaSt;
 	end

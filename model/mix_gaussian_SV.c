@@ -31,7 +31,7 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
     // Check for missing parameters
     if( pr_p == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'pi' required.");
+            "Structure input: Field 'p' required.");
 
     if( pr_mu == NULL )
         mexErrMsgIdAndTxt( "mhessian:invalidInputs",

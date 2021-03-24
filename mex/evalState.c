@@ -15,10 +15,18 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     ErrMsgTxt( nlhs <= 1,
     "Invalid outputs: One output argument expected");
     
+    // Check if structure input
+    if( !mxIsStruct(prhs[1]) )
+        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
+            "Structure input required.");
+
     // Allocate memory and initialize state parameters
     Theta *theta = thetaAlloc();
-    initializeThetaAlpha( mxGetField( prhs[1], 0, 'x' ), theta->alpha );
-    
+    if( mxGetField( prhs[1], 0, "x" ) != NULL )
+        initializeThetaAlpha( mxGetField( prhs[1], 0, "x" ), theta->alpha );
+    else
+        initializeThetaAlpha( prhs[1], theta->alpha );
+
     // Check state vector
     if( !mxIsDouble(prhs[0]) )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
