@@ -31,11 +31,7 @@ end
 function [lnf, dlnf_dth, d2lnf_dth2] = Be_phi(phi, alpha, beta)
 
 	% Value of log beta(alpha, beta) density on (-1,1), and two derivatives, at phi
-	lnf_phi = (alpha-1)*log(1+phi) + (beta-1)*log(1-phi);
-	dlnf_dphi = (alpha-1)./(1+phi) - (beta-1)./(1-phi);
-	d2lnf_dphi2 = -(alpha-1)./(1+phi).^2 - (beta-1)./(1-phi).^2;
-	
-	lnf = lnf_phi + log(1-phi.^2);
-	dlnf_dth = dlnf_dphi .* (1-phi.^2) - 2*phi;
-	d2lnf_dth2 = d2lnf_dphi2 .* (1-phi.^2).^2 - dlnf_dphi .* (2*phi).*(1-phi.^2) - 2*(1-phi.^2);
+	lnf = alpha * log(1+phi) + beta * log(1-phi);
+	dlnf_dth = (alpha - beta) - phi * (alpha + beta);
+	d2lnf_dth2 = -(alpha + beta) * (1-phi^2);
 end
