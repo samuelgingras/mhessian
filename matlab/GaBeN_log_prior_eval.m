@@ -18,19 +18,19 @@ end
 
 function [lnf, dlnf_dth, d2lnf_dth2] = Ga_sigma2(sigma2, alpha, beta)
 
-	% Value of log gamma(alpha, beta) density on (0,infty), and two derivatives, at sigma2
-	lnf_sigma2 = (alpha-1)*log(sigma2) - beta*sigma2;
-	dlnf_dsigma2 = (alpha-1)./sigma2 - beta;
-	d2lnf_dsigma2 = -(alpha-1)./(sigma2.^2);
-	
-	lnf = lnf_sigma2 + log(sigma2);
-	dlnf_dth = -dlnf_dsigma2 .* sigma2 - 1;
-	d2lnf_dth2 = d2lnf_dsigma2 .* sigma2.^2 + dlnf_dsigma2 .* sigma2;
+	% Value of unnormalized gamma(alpha, beta) log density on (0,infty),
+	% and two derivatives, with respect to theta = -log sigma2,
+	% evaluated at sigma2.
+	lnf = alpha * log(sigma2) - beta * sigma2;
+	dlnf_dth = -alpha + beta*sigma2;
+	d2lnf_dth2 = -beta*sigma2;
 end
 
 function [lnf, dlnf_dth, d2lnf_dth2] = Be_phi(phi, alpha, beta)
 
-	% Value of log beta(alpha, beta) density on (-1,1), and two derivatives, at phi
+	% Value of unnormalized beta(alpha, beta) log density on (-1,1),
+	% and two derivatives, with respect to theta = atanh(phi),
+	% evaluated at phi.
 	lnf = alpha * log(1+phi) + beta * log(1-phi);
 	dlnf_dth = (alpha - beta) - phi * (alpha + beta);
 	d2lnf_dth2 = -(alpha + beta) * (1-phi^2);
