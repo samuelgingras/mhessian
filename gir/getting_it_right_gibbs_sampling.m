@@ -1,4 +1,4 @@
-% File: getting_it_right_mhessian.m
+% File: getting_it_right_gibbs_sampling.m
 % 
 % Date: 2020-07-29
 % Author: Samuel Gingras
@@ -14,7 +14,7 @@ drawObs(123)
 hessianMethod(1234)
 
 % Set simulation parameters
-ndraw  = 10^5;              % Nb of posterior draw 
+ndraw  = 1e5;               % Nb of posterior draw 
 ndata  = 25;                % Nb of artificial observation
 
 % Set model parameters
@@ -25,11 +25,8 @@ omega0 = 100.0;             % Precision
 nu0    = 12.0;              % Student's t degree of freedom
 
 % Set prior distribution
-prior.type = 'MVN';
-prior.theta = [ log(omega0); atanh(phi0); mu0 ];
-prior.Sigma = diag( [ 0.5; 0.10; 0.10 ] );
-prior.H = -inv( prior.Sigma );
-prior.R = chol( -prior.H );
+prior = set_MVN_prior(true, [log(omega0); atanh(phi0); mu0], ...
+                             diag([0.5; 0.10; 0.10]));
 
 % Reserve space to store results
 postsim.mu = zeros(ndraw,1);
@@ -44,8 +41,8 @@ theta.x.omega = omega0;
 theta.y.nu = nu0;
 
 % Initial draw (y,x)
-x = drawState( theta );
-y = drawObs( x, model, theta );
+x = drawState(theta);
+y = drawObs(x, model, theta);
 
 % Evaluate initial draw (theta,x,y)
 hmout = hessianMethod( model, y, theta, 'EvalAtState', x );
@@ -94,16 +91,16 @@ for m = 1:ndraw
     
     % Transform parameters and evaluate likelihood and prior density
     th = transform_parameters( theta );
-    lnp_th = log_prior( prior, th );
-    lnp_x__th = log_likelihood( N, x1, xN, S1, S2, Sx, th );
+    lnp_th = prior.log_eval(prior, th);
+    lnp_x__th = log_likelihood(N, x1, xN, S1, S2, Sx, th);
 
     % Compute covariance matrix for Gaussian Random-Walk
-    R = prepare_proposal_gibbs( N, x1, xN, S1, S2, Sx );
+    R = prepare_proposal_gibbs(N, x1, xN, S1, S2, Sx);
 
     % Draw proposal and evaluate prior density and likelihood 
     thSt = th + R' * randn(3,1);
-    lnp_thSt = log_prior( prior, thSt );
-    lnp_x__thSt = log_likelihood( N, x1, xN, S1, S2, Sx, thSt );
+    lnp_thSt = prior.log_eval(prior, thSt);
+    lnp_x__thSt = log_likelihood(N, x1, xN, S1, S2, Sx, thSt);
 
     % Compute Hastings ratio
     lnH = lnp_x__thSt + lnp_thSt - lnp_x__th - lnp_th;
@@ -120,10 +117,10 @@ for m = 1:ndraw
     % -------------------- %
     
     % Draw y|theta,x
-    y = drawObs( x, model, theta );
+    y = drawObs(x, model, theta);
 
     % Update hessian approximation for new draw (theta,x,y)
-    hmout = hessianMethod( model, y, theta, 'EvalAtState', x );
+    hmout = hessianMethod(model, y, theta, 'EvalAtState', x);
 
     % Unpack likelihood evaluations
     lnp_x = hmout.lnp_x;

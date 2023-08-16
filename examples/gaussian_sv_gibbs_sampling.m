@@ -4,21 +4,21 @@
 % Author: Samuel Gingras
 
 % Clean workspace
-clear all
-clc
+%clear all
+%clc
 
-% Set seed
+% Set seeds of random number generators
 rng(1)
 drawState(12)
 drawObs(123)
 hessianMethod(1234)
 
 % Set simulation parameters
-ndraw  = 20000;             % Nb of posterior draws 
-burnin = 5000;              % Nb of burn-in draws 
-ndata  = 5000;              % Nb of artificial observations
+ndraw  = 20000;             % Number of posterior draws 
+burnin = 5000;              % Number of burn-in draws 
+ndata  = 5000;              % Number of artificial observations
 
-% Set model parameters
+% Set model, values of true parameters
 model  = 'gaussian_SV';     % Observation model
 mu0    = -9.5;              % Mean
 phi0   = 0.97;              % Autocorrelation
@@ -31,29 +31,23 @@ theta.phi = phi0;
 theta.omega = omega0;
 
 % Simulate artificial sample
-y = simulate_sample( model, theta );
+y = simulate_sample(model, theta);
 
-% Set prior distribution
-prior.type = 'MVN';
-prior.theta = [ 3.6; 2.5; -10.5 ];
-prior.Sigma = [ 1.25, 0.5, 0.0; 0.5, 0.25, 0.0; 0.0, 0.0, 0.25 ];
-prior.H = -inv( prior.Sigma );
-prior.R = chol( -prior.H );
+% Set prior distribution (mean and variance are arguments)
+%prior = set_MVN_prior(true, [3.6; 2.5; -10.5], ...
+%                      [1.25, 0.5, 0.0; 0.5, 0.25, 0.0; 0.0, 0.0, 0.25]);
+%prior = set_GaBeN_prior(true, 1, 50, 19, 1, -9, 1);
+prior = set_LNBeN_prior(true, -3, 1, 19, 1, -9, 1);
 
 % Reserve space to store results
-postsim.mu     = zeros(ndraw,1);
-postsim.phi    = zeros(ndraw,1);
-postsim.omega  = zeros(ndraw,1);
-postsim.aPr_x  = zeros(ndraw,1);
-postsim.aPr_th = zeros(ndraw,1);
-
-% Initialize theta structure at prior mean for MCMC
-theta.mu = prior.theta(3);
-theta.phi = tanh(prior.theta(2));
-theta.omega = exp(prior.theta(1));
+postsim.mu     = zeros(ndraw, 1);
+postsim.phi    = zeros(ndraw, 1);
+postsim.omega  = zeros(ndraw, 1);
+postsim.aPr_x  = zeros(ndraw, 1);
+postsim.aPr_th = zeros(ndraw, 1);
 
 % Initialize HESSIAN method approximation
-hmout = hessianMethod( model, y, theta );
+hmout = hessianMethod(model, y, theta);
 
 % Initialize state vector
 x = hmout.x;
@@ -65,7 +59,7 @@ lnp_y__x = hmout.lnp_y__x;
 lnq_x__y = hmout.lnq_x__y;
 
 
-for m = 1-burnin:ndraw
+for m = (1-burnin):ndraw
 
     % -------------------- %
     % Update x|theta,y     %
@@ -74,7 +68,7 @@ for m = 1-burnin:ndraw
     % Draw proposal xSt
     hmout = hessianMethod( model, y, theta, 'GuessMode', xC );
     xSt   = hmout.x;
-    x0St  = hmout.x_mode;
+    xCSt  = hmout.xC;
 
     % Unpack likelihood evaluations
     lnp_xSt = hmout.lnp_x;
@@ -85,11 +79,11 @@ for m = 1-burnin:ndraw
     lnH = lnp_y__xSt + lnp_xSt - lnq_xSt__y;
     lnH = lnH - lnp_y__x - lnp_x + lnq_x__y;
 
-    % Accept/reject for xSt
-    aPr_x = min( 1, exp(lnH) );
+    % Accept or reject proposal xSt
+    aPr_x = min(1, exp(lnH));
     if( rand < aPr_x )
         x = xSt;
-        x0 = x0St;
+        x0 = xCSt;
     end
 
     % -------------------- %
@@ -105,23 +99,23 @@ for m = 1-burnin:ndraw
     Sx = sum(x(2:N) .* x(1:N-1));
     
     % Transform parameters and evaluate prior density and likelihood
-    th = transform_parameters( theta );
-    lnp_th = log_prior( prior, th );
-    lnp_x__th = log_likelihood( N, x1, xN, S1, S2, Sx, th );
+    th = transform_parameters(theta);
+    lnp_th = prior.log_eval(prior, th);
+    lnp_x__th = log_likelihood(N, x1, xN, S1, S2, Sx, th);
 
     % Compute covariance matrix for Gaussian Random-Walk
-    R = prepare_proposal_gibbs( N, x1, xN, S1, S2, Sx );
+    R = prepare_proposal_gibbs(N, x1, xN, S1, S2, Sx);
 
     % Draw proposal and evaluate prior density and likelihood 
     thSt = th + R' * randn(3,1);
-    lnp_thSt = log_prior( prior, thSt );
-    lnp_x__thSt = log_likelihood( N, x1, xN, S1, S2, Sx, thSt );
+    lnp_thSt = prior.log_eval(prior, thSt);
+    lnp_x__thSt = log_likelihood(N, x1, xN, S1, S2, Sx, thSt);
 
     % Compute Hastings ratio
     lnH = lnp_x__thSt + lnp_thSt - lnp_x__th - lnp_th;
 
     % Accept/reject for thSt
-    aPr_th = min( 1, exp(lnH) );
+    aPr_th = min(1, exp(lnH));
     if( rand < aPr_th )
 
         % Update theta structure
@@ -130,7 +124,7 @@ for m = 1-burnin:ndraw
         theta.omega = exp(thSt(1));
 
         % Update HESSIAN method approximation
-        hmout = hessianMethod( model, y, theta, 'GuessMode', xC, 'EvalAtState', x );
+        hmout = hessianMethod(model, y, theta, 'GuessMode', xC, 'EvalAtState', x);
 
         % Unpack likelihood evaluations
         lnp_x = hmout.lnp_x;
