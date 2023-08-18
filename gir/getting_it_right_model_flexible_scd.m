@@ -6,7 +6,7 @@ drawState(123);
 hessianMethod(1234);
 
 % Simulation parameters
-ndraw  = 10^2;
+ndraw  = 1e2;
 nblock = 1000;
 ndata  = 10;
 

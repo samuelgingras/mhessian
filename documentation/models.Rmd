@@ -1,0 +1,214 @@
+---
+title: "Models"
+author: "William McCausland"
+output: pdf_document
+---
+
+### Burr state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+\[
+    f(\epsilon_t | \eta, \kappa, \lambda) = \eta \kappa \lambda
+    \frac{(\lambda \epsilon_t)^{\eta - 1}}{[1 + (\lambda\epsilon_t)^\eta)^{\kappa + 1}]}
+\]
+
+Note that the scale parameter $\lambda$ is not set to make $E[\epsilon_t] = 1$, as in the exponential, gamma and Weibull state space models, since the Burr mean is not a straightforward function of $\lambda$.
+
+Using $\eta = 1.2$, $\kappa = 2.5$, $\lambda = 1.1$ in getting it right example.
+
+### Exponential state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+\[
+    \epsilon_t \sim \mathrm{Exp}(1)
+\]
+\[
+    f(\epsilon_t) = e^{-\epsilon_t}
+\]
+
+$E[y_t|x_t] = 1$.
+
+### Gamma state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+\[
+    \epsilon_t \sim \mathrm{Ga}(\kappa, \kappa)
+\]
+\[
+    f(\epsilon_t|\kappa) = \frac{\Gamma(\kappa)}{\kappa^\kappa} \epsilon_t^{\kappa-1}
+    e^{-\kappa \epsilon_t}
+\]
+
+$E[y_t|x_t] = 1$.
+
+Using $\kappa = 2$ in the getting it right example.
+
+### Gamma Poisson state space model
+
+For non-negative integer observations: $y_t \in \{0,1,\ldots\}$.
+
+\[
+    y_t \sim \mathrm{NegBin}(r, r/(r+e^{x_t}))
+\]
+
+We have set the $p$ parameter as $p = r/(r+e^{x_t})$, which makes $E[y_t|x_t] = e^{x_t}$.
+
+Negative binomial interpretation: $p$ is probability of success in independent trials, $y_t$ is number of failures before the $r$'th success.
+Interpretation fails for $r$ non-integral, but all values $r > 0$ are possible.
+
+Gamma-Poisson interpretation: draw $\lambda \sim \mathrm{Ga}(r, re^{-x_t})$, draw $y_t \sim \mathrm{Po}(\lambda)$.
+
+Using $r = 10$ in the getting it right example.
+
+### Gaussian stochastic volatility model
+
+For real observations: $y_t \in (-\infty, \infty)$.
+
+Given $x_t$,
+\[
+    y_t|x_t \sim \mathrm{N}(0,e^{x_t})
+\]
+\[
+    f(y_t|x_t) = \frac{e^{x_t/2}}{\sqrt{2\pi}} \exp(-\tfrac{1}{2} e^{x_t} y_t^2).
+\]
+
+### Generalized gamma state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    f(\epsilon | \lambda,\eta,\kappa) = 
+        \frac{\eta}{\Gamma(\kappa)} \lambda^{\eta\kappa} \epsilon^{\eta\kappa - 1}
+        \exp\left[-(\lambda \epsilon)^{\eta}\right]
+\]
+\[
+    F(\epsilon) = \frac{\gamma(\kappa, (\lambda \epsilon)^\eta)}{\Gamma(\kappa)}
+\]
+where $\gamma(a,b) = \int_0^b t^{a-1}e^{-t}dt$ is the lower incomplete gamma function.
+with moments given by
+\[
+    E[\epsilon^s] = \lambda^{-s} \frac{\Gamma(\kappa + s/\eta)}{\Gamma(\kappa)}.
+\]
+For identification, we fix the mean of the distribution to one by substituting the scale parameter $\lambda$ by 
+\[
+    \lambda = \frac{\Gamma(\kappa + 1/\eta)}{\Gamma(\kappa)}
+\]
+in the expression for the density.
+Hence, the density of the generalized gamma with unit mean is given by
+\[
+    p(y_i | x_i; \theta, \vartheta) = 
+    \frac{\eta}{\Gamma(\kappa)}
+    \left(\frac{\Gamma(\kappa + 1/\eta)}{\Gamma(\kappa)}\right)^{\eta\kappa}
+    \epsilon^{\eta\kappa - 1}
+    \exp\left[-\left(\epsilon\frac{\Gamma(\kappa + 1/\eta)}{\Gamma(\kappa)}\right)^{\eta}\right].
+\]
+
+### Mixture of exponentials state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+and the distribution $\epsilon_t|x_t$ is a finite mixture of exponentials, not necessarily with a unit mean.
+\[
+    f(\epsilon_t|x_t) = \sum_{j=1}^J p_j \lambda_j e^{-\lambda_j \epsilon_j}.
+\]
+The $p_j$ are restricted so that $\sum_{j=1}^J \pi_j = 1$.
+$p_j < 0$ is allowed, provided that $f(\epsilon_t|x_t)$ is non-negative for all $\epsilon_t \geq 0$.
+
+Using $p = (0.5, 0.3, 0.2)$ and $\lambda = (1, 2, 4)$ in getting it right example.
+
+### Mixture of gammas state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+and the distribution $\epsilon_t|x_t$ is a finite mixture of gammas, not necessarily with a unit mean.
+\[
+    f(\epsilon_t|x_t) = \sum_{j=1}^J p_j
+    \frac{\Gamma(\kappa_j)}{\lambda_j^{\kappa_j}}
+    \epsilon_t^{\kappa_j - 1} e^{-\lambda_j \epsilon_t}
+\]
+The $p_j$ are restricted so that $p_j \geq 0$, $j=1,\ldots,J$ and $\sum_{j=1}^J \pi_j = 1$.
+
+Using $p = (0.5, 0.3, 0.2)$, $\kappa = (1, 2, 4)$ and $\lambda = (2, 3, 4)$ in getting it right example.
+
+### Mixture of Gaussians stochastic volatility model
+
+For real observations: $y_t \in (-\infty, \infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t/2},
+\]
+and the distribution $\epsilon_t|x_t$ is a finite mixture of Gaussians, not necessarily with a unit mean.
+\[
+    f(\epsilon_t|x_t) = \frac{1}{\sqrt{2\pi}}
+    \sum_{j=1}^J p_j
+    \frac{1}{\sigma_j} \exp\left[ -\frac{(y_t-\mu_j)^2}{2\sigma_j^2} \right]
+\]
+
+Using $p = (0.5, 0.3, 0.2)$, $\mu = (0, -1, 1)$ and $\sigma = (1, 2, 2)$ in getting it right example.
+
+
+### Poisson state space model
+
+For non-negative integer observations: $y_t \in \{0,1,\ldots\}$.
+
+\[
+    y_t|x_t \sim \mathrm{Po}(e^{x_t})
+\]
+\[
+    f(y_t) = \frac{\exp(-e^{x_t}) e^{x_t y_t}}{y_t!}
+\]
+
+### Student's $t$ stochastic volatility model
+
+For real observations: $y_t \in (-\infty, \infty)$.
+
+Given $x_t$,
+\[
+    y_t \exp(-x_t/2) \sim \mathrm{St}(\nu)
+\]
+\[
+    f(y_t|x_t) = \left(
+        \frac{\nu}{\nu + y_te^{-x_t/2}}
+    \right)^{(\nu + 1)/2}
+    e^{-x_t/2}.
+\]
+
+Using $\nu = 12$ in the getting it right example.
+
+### Weibull state space model
+
+For positive real observations: $y_t \in [0,\infty)$.
+
+\[
+    y_t = \epsilon_t e^{x_t},
+\]
+\[
+    \frac{\epsilon_t}{\Gamma(1 + \tfrac{1}{\eta})} \sim \mathrm{Wei}(\eta)
+\]
+\[
+    f(\epsilon_t|x_t) = \frac{\eta}{\Gamma(1 + \tfrac{1}{\eta})}
+    \left(
+        \frac{\epsilon_t}{\Gamma(1 + \tfrac{1}{\eta})}
+    \right)^{\eta-1}
+    \exp(-y_t/\Gamma(1 + \tfrac{1}{\eta}))
+\]
+
+Using $\eta = 2$ in getting it right example.

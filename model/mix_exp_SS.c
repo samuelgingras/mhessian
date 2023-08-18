@@ -6,7 +6,7 @@
 #include "state.h"
 #include "faa_di_bruno.h"
 
-
+static int n_dimension_parameters = 1;
 static int n_theta = 2;
 static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
@@ -19,6 +19,24 @@ static char *usage_string =
 "\tw_j\t Component weight of the jth exponential distribution\n"
 "\tlambda_j\t Shape parameter of the jth exponential distribution";
 
+static int all_positive(int n, double *p) {
+    for (int i=0; i<n; i++)
+        if (p[i] < 0)
+            return 0;
+    return 1;
+}
+
+static int sum_to_one(int n, double *p) {
+    double sum = 0.0;
+    for (int i=0; i<n; i++)
+        sum += p[i];
+    return (fabs(sum-1.0) < 1e-9);
+}
+
+static Parameter_specification parameter_specification[] = {
+    {"p", 0, -1, sum_to_one},
+    {"lambda", 0, -1, all_positive}    
+};
 
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
