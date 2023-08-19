@@ -22,7 +22,7 @@ typedef struct {
     
     double r;
     double nu;
-    double alpha;
+    double x;
     double beta;
     double eta;
     double kappa;
@@ -47,6 +47,13 @@ typedef struct {
 } Parameter;
 
 typedef struct {
+    char *name;
+    int row_dimension_index;
+    int col_dimension_index;
+    int (*verify)(int n_elements, double *p);
+} Parameter_specification;
+
+typedef struct {
     int n;
     int is_basic;
 
@@ -56,7 +63,7 @@ typedef struct {
     int is_omega_basic;
     int is_grad_hess;
     
-    double alpha_mean;
+    double x_mean;
     double phi;
     double omega;
     
@@ -68,7 +75,7 @@ typedef struct {
 
 typedef struct {
     Parameter *y;
-    State_parameter *alpha;
+    State_parameter *x;
 } Theta;
 
 typedef struct {
@@ -81,7 +88,7 @@ typedef struct {
     int max_iterations;                 // WJM: delete if not using
     int max_iterations_safe;
     int max_iterations_unsafe;
-    int n_alpha_partials;
+    int n_x_partials;
     
     int circ_buffer_pos;                // SG: not used
     int circ_buffer_len;                // SG: not used
@@ -94,7 +101,7 @@ typedef struct {
     int safe;                           // SG: remove as input for compute_alC (use state)
     
     // Computation variables
-    double *alpha;
+    double *x;
     double *Hb_0;
     double *Hb_1;
     double *cb;
@@ -128,7 +135,7 @@ typedef struct {
     double *psi;
     
     // Diagnostic variables
-    // Documented in compute_diagnostics function in alpha_univariate.c
+    // Documented in compute_diagnostics function in x_univariate.c
     int compute_diagnostics;
     int fatal_error_detected;
     double *psi2ratio;
@@ -147,10 +154,10 @@ typedef struct {
     void (*initializeTheta)(const mxArray *prhs, Theta *theta);
     void (*initializeParameter)(const mxArray *prhs, Parameter *theta_y);
     
-    void (*draw_y__theta_alpha)(double *alpha, Parameter *theta_y, Data *data);
-    void (*log_f_y__theta_alpha)(double *alpha, Parameter *theta_y, Data *data, double *log_f);
+    void (*draw_y__theta_x)(double *x, Parameter *theta_y, Data *data);
+    void (*log_f_y__theta_x)(double *x, Parameter *theta_y, Data *data, double *log_f);
     
-    void (*compute_derivatives_t)(Theta *theta, Data *data, int t, double alpha, double *psi_t);
+    void (*compute_derivatives_t)(Theta *theta, Data *data, int t, double x, double *psi_t);
     void (*compute_derivatives)(Theta *theta, State *state, Data *data);
     
     char *usage_string;
@@ -164,7 +171,7 @@ typedef struct {
     double **C_field_pointer;
 } Field;
 
-void initializeThetaAlpha( const mxArray *prhs, State_parameter *theta_alpha );
+void initializeThetax( const mxArray *prhs, State_parameter *theta_x );
 State *stateAlloc( void );
 Theta *thetaAlloc( void );
 Data *dataAlloc( void );

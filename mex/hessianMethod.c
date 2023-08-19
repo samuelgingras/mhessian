@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "mex.h"
-#include "alpha_univariate.h"
+#include "x_univariate.h"
 #include "grad_hess.h"
 #include "state.h"
 #include "errors.h"
@@ -63,13 +63,13 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         model->initializeTheta( prhs[2], theta );
         
         // Initialize mxState
-        mxArray *mxState = mxStateAlloc(theta->alpha->n, model, state);
+        mxArray *mxState = mxStateAlloc(theta->x->n, model, state);
         
         // TODO: change function to check input compatibility
         // Set model specific function ?
 
         // Check observation data
-        ErrMsgTxt( data->m == theta->alpha->n,
+        ErrMsgTxt( data->m == theta->x->n,
         "Invalid input argument: incompatible vector length");
         
         // Create/set field pointer for output structure
@@ -176,7 +176,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
                 }
                 if( mxIsLogicalScalarTrue(prhs[iter+1]) ) {  
                     isDraw = FALSE;
-                    memcpy(state->alpha, state->alC, state->n * sizeof(double));
+                    memcpy(state->x, state->alC, state->n * sizeof(double));
                 }
             }
             else if( strcmp(opt, "EvalAtState") == 0) {
@@ -189,7 +189,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
                         "EvalAtState: Incompatible column vector.");
                 }
                 isDraw = FALSE;
-                memcpy(state->alpha, mxGetDoubles(prhs[iter+1]), state->n * sizeof(double));
+                memcpy(state->x, mxGetDoubles(prhs[iter+1]), state->n * sizeof(double));
             }
             mxFree(opt);
         }
@@ -208,7 +208,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             }
 
             if( strcmp(opt, "GradHess") == 0 ) {
-                if( !theta->alpha->is_grad_hess ) {
+                if( !theta->x->is_grad_hess ) {
                     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                         "GradHess: Unavailable theta specification."); 
                 }
@@ -239,10 +239,10 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         draw_HESSIAN( isDraw, model, theta, state, data, mxGetPr(lnq_x) );
         
         // (4) Evaluate states prior log-likelihood
-        alpha_prior_eval( theta->alpha, state->alpha, mxGetPr(lnp_x) );
+        x_prior_eval( theta->x, state->x, mxGetPr(lnp_x) );
         
         // (5) Evaluate observations conditional log-likelihood given the states
-        model->log_f_y__theta_alpha( state->alpha, theta->y, data, mxGetPr(lnp_y) );
+        model->log_f_y__theta_x( state->x, theta->y, data, mxGetPr(lnp_y) );
         
 
         // Create MATLAB output structure

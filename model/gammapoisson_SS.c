@@ -60,7 +60,7 @@ static void initializeTheta(const mxArray *prhs, Theta *theta)
             "Nested structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 
 }
@@ -97,17 +97,17 @@ void initializeData(const mxArray *prhs, Data *data)
 }
 
 static
-void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int n = data->n;
     double r = theta_y->r;
     
     for(int t=0; t<n; t++)
-        data->y[t] = (double) rng_n_binomial( r / (r + exp(alpha[t])), r );
+        data->y[t] = (double) rng_n_binomial( r / (r + exp(x[t])), r );
 }
 
 static
-void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     double r = theta_y->r;
@@ -117,14 +117,14 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     for (int t=0; t<n; t++)
     {
         *log_f += lgamma(r + data->y[t]) - lgamma(data->y[t] + 1) 
-            + data->y[t] * alpha[t] - (r + data->y[t]) * log(r + exp(alpha[t]));
+            + data->y[t] * x[t] - (r + data->y[t]) * log(r + exp(x[t]));
     }
 }
 
 static inline
-void derivative(double y_t, double r, double alpha_t, double *psi_t)
+void derivative(double y_t, double r, double x_t, double *psi_t)
 {
-    double x = exp(alpha_t);
+    double x = exp(x_t);
     double x2 = x * x;
     double x3 = x2 * x;
     double r2 = r * r;
@@ -145,9 +145,9 @@ void derivative(double y_t, double r, double alpha_t, double *psi_t)
 }
 
 static
-void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative( data->y[t], theta->y->r, alpha, psi_t );
+    derivative( data->y[t], theta->y->r, x, psi_t );
 }
 
 static
@@ -156,11 +156,11 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     int t, n = state->n;
     double r = theta->y->r;
     double *k = data->y; 
-    double *alpha = state->alC;	
+    double *x = state->alC;	
     double *psi_t;
     
     for(t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride)
-        derivative( k[t], r, alpha[t], psi_t );
+        derivative( k[t], r, x[t], psi_t );
 }
 
 static
@@ -181,8 +181,8 @@ void initializeModel()
     gammapoisson_SS.initializeTheta = initializeTheta;
     gammapoisson_SS.initializeParameter = initializeParameter;
     
-    gammapoisson_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    gammapoisson_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    gammapoisson_SS.draw_y__theta_x = draw_y__theta_x;
+    gammapoisson_SS.log_f_y__theta_x = log_f_y__theta_x;
     
     gammapoisson_SS.compute_derivatives_t = compute_derivatives_t;
     gammapoisson_SS.compute_derivatives = compute_derivatives;

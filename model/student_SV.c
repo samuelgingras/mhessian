@@ -62,7 +62,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Nested structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 }
 
@@ -98,16 +98,16 @@ void initializeData(const mxArray *prhs, Data *data)
 }
 
 static
-void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int t,n = data->n;
     double nu = theta_y->nu;
     for (t=0; t<n; t++)
-        data->y[t] = rng_t(nu) * exp(alpha[t]/2);
+        data->y[t] = rng_t(nu) * exp(x[t]/2);
 }
 
 static
-void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int t,n = data->n;
     double nu = theta_y->nu;
@@ -115,17 +115,17 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     double result = 0.0;
     for (t=0; t<n; t++) {
         double y_t_2 = int_pow(data->y[t],2);
-        result -= coeff * log(1.0 + y_t_2 * exp(-alpha[t]) / nu) + 0.5 * alpha[t];
+        result -= coeff * log(1.0 + y_t_2 * exp(-x[t]) / nu) + 0.5 * x[t];
     }
     
     *log_f = result + n * (lgamma(coeff) -lgamma(0.5*nu) - 0.5 * log(nu*M_PI));
 }
 
 static inline
-void derivative( double y_t, double alpha_t, double nu, double *psi_t )
+void derivative( double y_t, double x_t, double nu, double *psi_t )
 {
     double coeff = 0.5 * (nu + 1);
-    double x = exp(-alpha_t) * int_pow(y_t,2) / nu;
+    double x = exp(-x_t) * int_pow(y_t,2) / nu;
     double coeff_x = coeff * x;
     double x2 = x * x;
     double x3 = x2 * x;
@@ -143,9 +143,9 @@ void derivative( double y_t, double alpha_t, double nu, double *psi_t )
 }
 
 static 
-void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative(data->y[t], alpha, theta->y->nu, psi_t);
+    derivative(data->y[t], x, theta->y->nu, psi_t);
 }
 
 static 
@@ -154,11 +154,11 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
     int t, n = state->n;
     double nu = theta->y->nu;
     double *y = data->y; 
-    double *alpha = state->alC; 
+    double *x = state->alC; 
     double *psi_t;
     
     for(t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride) {
-        derivative( y[t], alpha[t], nu, psi_t );
+        derivative( y[t], x[t], nu, psi_t );
   	}
 }
 
@@ -180,8 +180,8 @@ void initializeModel()
     student_SV.initializeTheta = initializeTheta;
     student_SV.initializeParameter = initializeParameter;
     
-    student_SV.draw_y__theta_alpha = draw_y__theta_alpha;
-    student_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    student_SV.draw_y__theta_x = draw_y__theta_x;
+    student_SV.log_f_y__theta_x = log_f_y__theta_x;
     
     student_SV.compute_derivatives_t = compute_derivatives_t;
     student_SV.compute_derivatives = compute_derivatives;

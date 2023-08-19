@@ -61,7 +61,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Nested structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 }
 
@@ -97,7 +97,7 @@ void initializeData(const mxArray *prhs, Data *data)
 }
 
 static
-void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int n = data->n;
     double scale = 1/theta_y->lambda;
@@ -105,12 +105,12 @@ void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
 
     for( int t=0; t<n; t++ ) {
         double u = rng_exp(1);
-        data->y[t] = exp(alpha[t]) * scale * pow(u,shape);
+        data->y[t] = exp(x[t]) * scale * pow(u,shape);
     }
 }
 
 static
-void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     double eta = theta_y->eta;
@@ -120,20 +120,20 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
 
     for(int t=0; t<n; t++)
     {
-        double y_alpha_t = data->y[t] * exp(-alpha[t]) * lambda;
-        *log_f += (eta - 1) * log(data->y[t]) - pow(y_alpha_t, eta) - eta * alpha[t] ;
+        double y_x_t = data->y[t] * exp(-x[t]) * lambda;
+        *log_f += (eta - 1) * log(data->y[t]) - pow(y_x_t, eta) - eta * x[t] ;
     }
 }
 
 static inline
-void derivative(double y_t, double eta, double lambda, double alpha_t, double *psi_t)
+void derivative(double y_t, double eta, double lambda, double x_t, double *psi_t)
 {   
     double eta2 = eta  * eta;
     double eta3 = eta2 * eta;
     double eta4 = eta3 * eta;
     double eta5 = eta4 * eta;
 
-    double y = y_t * exp(-alpha_t) * lambda;
+    double y = y_t * exp(-x_t) * lambda;
     double z = pow(y,eta);
 
     psi_t[1] =  eta  * z - eta;
@@ -144,21 +144,21 @@ void derivative(double y_t, double eta, double lambda, double alpha_t, double *p
 }
 
 static
-void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative( data->y[t], theta->y->eta, theta->y->lambda, alpha, psi_t );
+    derivative( data->y[t], theta->y->eta, theta->y->lambda, x, psi_t );
 }
 
 static
 void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int n = state->n;
-    double *alpha = state->alC;
+    double *x = state->alC;
 
     for(int t=0; t<n; t++)
     {
         double *psi_t = state->psi + t * state->psi_stride;
-        derivative( data->y[t], theta->y->eta, theta->y->lambda, alpha[t], psi_t );
+        derivative( data->y[t], theta->y->eta, theta->y->lambda, x[t], psi_t );
     }
 }
 
@@ -180,8 +180,8 @@ void initializeModel()
     weibull_SS.initializeTheta = initializeTheta;
     weibull_SS.initializeParameter = initializeParameter;
     
-    weibull_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    weibull_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    weibull_SS.draw_y__theta_x = draw_y__theta_x;
+    weibull_SS.log_f_y__theta_x = log_f_y__theta_x;
     
     weibull_SS.compute_derivatives_t = compute_derivatives_t;
     weibull_SS.compute_derivatives = compute_derivatives;

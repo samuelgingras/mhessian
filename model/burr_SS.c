@@ -76,7 +76,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Nested structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 }
 
@@ -111,7 +111,7 @@ void initializeData(const mxArray *prhs, Data *data)
     }
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int n = data->n;
     double shape_eta = 1/theta_y->eta;
@@ -121,11 +121,11 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
     for( int t=0; t<n; t++ ) {
         double u = rng_rand();
         double v = pow( 1/(1-u), shape_kappa );
-        data->y[t] = exp(alpha[t]) * scale_lambda * pow( v-1, shape_eta );
+        data->y[t] = exp(x[t]) * scale_lambda * pow( v-1, shape_eta );
     }
 }
 
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     double eta = theta_y->eta;
@@ -135,21 +135,21 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
     *log_f = n * ( eta * log(lambda) + log(eta) + log(kappa) );
 
     for( int t=0; t<n; t++ ) {
-        double z = lambda * data->y[t] * exp(-alpha[t]);
+        double z = lambda * data->y[t] * exp(-x[t]);
         double z_eta = pow( z, eta );
-        *log_f += (eta-1) * log(data->y[t]) - eta * alpha[t] - (kappa+1) * log1p(z_eta);
+        *log_f += (eta-1) * log(data->y[t]) - eta * x[t] - (kappa+1) * log1p(z_eta);
     }
 }
 
 static inline 
-void derivative(double eta, double kappa, double lambda, double y_t, double alpha_t, double *psi_t)
+void derivative(double eta, double kappa, double lambda, double y_t, double x_t, double *psi_t)
 {   
     double g[6];
     double h[6];
     double q[6];
 
     // Step 1: Direct computation h(x) = (lambda * y * exp(-x))^eta;
-    h[0] = pow( lambda * y_t * exp(-alpha_t), eta );
+    h[0] = pow( lambda * y_t * exp(-x_t), eta );
     h[1] = -h[0] * eta;
     h[2] = -h[1] * eta;
     h[3] = -h[2] * eta;
@@ -177,13 +177,13 @@ void derivative(double eta, double kappa, double lambda, double y_t, double alph
 }
 
 static 
-void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
     double eta = theta->y->eta;
     double kappa = theta->y->kappa;
     double lambda = theta->y->lambda;
 
-    derivative( eta, kappa, lambda, data->y[t], alpha, psi_t );
+    derivative( eta, kappa, lambda, data->y[t], x, psi_t );
 }
 
 static
@@ -195,11 +195,11 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     double lambda = theta->y->lambda;
     
     int t, n = state->n;
-    double *alpha = state->alC;
+    double *x = state->alC;
     double *psi_t;
 
     for( t=0, psi_t = state->psi; t<n; t++, psi_t += state->psi_stride )
-        derivative( eta, kappa, lambda, data->y[t], alpha[t], psi_t );
+        derivative( eta, kappa, lambda, data->y[t], x[t], psi_t );
 }
 
 static
@@ -220,8 +220,8 @@ void initializeModel()
     burr_SS.initializeTheta = initializeTheta;
     burr_SS.initializeParameter = initializeParameter;
     
-    burr_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    burr_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    burr_SS.draw_y__theta_x = draw_y__theta_x;
+    burr_SS.log_f_y__theta_x = log_f_y__theta_x;
     
     burr_SS.compute_derivatives_t = compute_derivatives_t;
     burr_SS.compute_derivatives = compute_derivatives;

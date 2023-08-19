@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "mex.h"
-#include "alpha_univariate.h"
+#include "x_univariate.h"
 #include "state.h"
 #include "errors.h"
 
@@ -23,9 +23,9 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     // Allocate memory and initialize state parameters
     Theta *theta = thetaAlloc();
     if( mxGetField( prhs[1], 0, "x" ) != NULL )
-        initializeThetaAlpha( mxGetField( prhs[1], 0, "x" ), theta->alpha );
+        initializeThetax( mxGetField( prhs[1], 0, "x" ), theta->x );
     else
-        initializeThetaAlpha( prhs[1], theta->alpha );
+        initializeThetax( prhs[1], theta->x );
 
     // Check state vector
     if( !mxIsDouble(prhs[0]) )
@@ -36,7 +36,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
             "Column vector required.");
 
-    if( mxGetM(prhs[0]) != theta->alpha->n )
+    if( mxGetM(prhs[0]) != theta->x->n )
     mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
         "Incompatible vector length.");
     
@@ -44,5 +44,5 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     plhs[0] = mxCreateDoubleMatrix( 1, 1, mxREAL );
     
     // Evaluate state
-    alpha_prior_eval( theta->alpha, mxGetDoubles(prhs[0]), mxGetDoubles(plhs[0]) );
+    x_prior_eval( theta->x, mxGetDoubles(prhs[0]), mxGetDoubles(plhs[0]) );
 }

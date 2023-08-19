@@ -62,7 +62,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 
 }
@@ -102,17 +102,17 @@ void initializeData(const mxArray *prhs, Data *data)
     }
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int n = data->n;
     double kappa = theta_y->kappa;
     double scale = 1/theta_y->lambda;
     
     for( int t=0; t<n; t++ )
-        data->y[t] = exp(alpha[t]) * scale * rng_gamma(kappa,1);
+        data->y[t] = exp(x[t]) * scale * rng_gamma(kappa,1);
 }
 
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
     double kappa = theta_y->kappa;
@@ -121,32 +121,32 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
 
     for(int t=0; t<n; t++)
     {
-        double y_alpha_t = data->y[t] * exp(-alpha[t]) * kappa;
-        *log_f += (kappa - 1) * log(data->y[t]) - kappa * alpha[t] - y_alpha_t;
+        double y_x_t = data->y[t] * exp(-x[t]) * kappa;
+        *log_f += (kappa - 1) * log(data->y[t]) - kappa * x[t] - y_x_t;
     }
 }
 
-static inline void derivative(double y_t, double kappa, double alpha_t, double *psi_t)
+static inline void derivative(double y_t, double kappa, double x_t, double *psi_t)
 {   
-    psi_t[3] = psi_t[5] = y_t * exp(-alpha_t) * kappa;
+    psi_t[3] = psi_t[5] = y_t * exp(-x_t) * kappa;
     psi_t[2] = psi_t[4] = -psi_t[3];
     psi_t[1] = psi_t[3] - kappa;
 }
 
-static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+static void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative( data->y[t], theta->y->kappa, alpha, psi_t );
+    derivative( data->y[t], theta->y->kappa, x, psi_t );
 }
 
 static void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int n = state->n;
-    double *alpha = state->alC;
+    double *x = state->alC;
 
     for(int t=0; t<n; t++)
     {
         double *psi_t = state->psi + t * state->psi_stride;
-        derivative( data->y[t], theta->y->kappa, alpha[t], psi_t );
+        derivative( data->y[t], theta->y->kappa, x[t], psi_t );
     }
 }
 
@@ -168,8 +168,8 @@ void initializeModel()
     gamma_SS.initializeTheta = initializeTheta;
     gamma_SS.initializeParameter = initializeParameter;
     
-    gamma_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    gamma_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    gamma_SS.draw_y__theta_x = draw_y__theta_x;
+    gamma_SS.log_f_y__theta_x = log_f_y__theta_x;
     
     gamma_SS.compute_derivatives_t = compute_derivatives_t;
     gamma_SS.compute_derivatives = compute_derivatives;

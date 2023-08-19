@@ -83,6 +83,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         data->y = mxGetDoubles(plhs[0]);
 
         // Draw observations
-        model->draw_y__theta_alpha( mxGetDoubles(prhs[0]), theta->y, data );
+        model->draw_y__theta_x( mxGetDoubles(prhs[0]), theta->y, data );
     }
 }

@@ -9,7 +9,7 @@
 // Default computation options
 #define TOLREANCE       0.0001
 #define MAX_ITERATIONS     100
-#define N_ALPHA_PARTIALS     4
+#define N_x_PARTIALS     4
 
 #define TRUE    1
 #define FALSE   0
@@ -34,7 +34,7 @@ static double *readStateParameter(int n, const mxArray *prhs)
     return x_tm;
 }
 
-void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
+void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
 {
     // Set pointer to each field
     mxArray *pr_N = mxGetField(prhs,0,"N");
@@ -50,17 +50,17 @@ void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
     // Read number of observation
     ErrMsgTxt( mxIsScalar(pr_N),
     "Invalid input argument: scalar value expected");
-    theta_alpha->n = mxGetScalar(pr_N);
+    theta_x->n = mxGetScalar(pr_N);
 
     
     // Set default value
-    theta_alpha->is_basic = TRUE;
-    theta_alpha->is_grad_hess = TRUE;
+    theta_x->is_basic = TRUE;
+    theta_x->is_grad_hess = TRUE;
     
 
     // Check if model as mean or intercept parameter
     if( pr_d == NULL && pr_mu == NULL ) {
-        theta_alpha->alpha_mean = 0.0;
+        theta_x->x_mean = 0.0;
     }
 
     // Check intercept parameter
@@ -69,33 +69,33 @@ void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
             mexErrMsgIdAndTxt("mhessian:invalidrhs", "Intercept: vector input required.");
         }
         else {
-            theta_alpha->is_basic = FALSE;
-            theta_alpha->is_grad_hess = FALSE;
+            theta_x->is_basic = FALSE;
+            theta_x->is_grad_hess = FALSE;
         }
     }
 
     // Check mean parameter
     if( pr_mu != NULL ) {
         if( mxIsScalar(pr_mu) ) {
-            theta_alpha->is_mu_basic = TRUE;
-            theta_alpha->alpha_mean = mxGetScalar(pr_mu);
+            theta_x->is_mu_basic = TRUE;
+            theta_x->x_mean = mxGetScalar(pr_mu);
         }
         else {
-            theta_alpha->is_mu_basic = FALSE;
-            theta_alpha->is_basic = FALSE;
+            theta_x->is_mu_basic = FALSE;
+            theta_x->is_basic = FALSE;
         }
     }
 
     //  Check autocorrelation parameter
     if( pr_phi != NULL ) {
         if( mxIsScalar(pr_phi) ) {
-            theta_alpha->is_phi_basic = TRUE;
-            theta_alpha->phi = mxGetScalar(pr_phi);
+            theta_x->is_phi_basic = TRUE;
+            theta_x->phi = mxGetScalar(pr_phi);
         }
         else {
-            theta_alpha->is_phi_basic = FALSE;
-            theta_alpha->is_basic = FALSE;
-            theta_alpha->is_grad_hess = FALSE;
+            theta_x->is_phi_basic = FALSE;
+            theta_x->is_basic = FALSE;
+            theta_x->is_grad_hess = FALSE;
         }
     }
     else {
@@ -105,13 +105,13 @@ void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
     // Check precision parameter
     if( pr_omega != NULL ) {
         if( mxIsScalar(pr_omega) ) {
-            theta_alpha->is_omega_basic = TRUE;
-            theta_alpha->omega = mxGetScalar(pr_omega);
+            theta_x->is_omega_basic = TRUE;
+            theta_x->omega = mxGetScalar(pr_omega);
         }
         else {
-            theta_alpha->is_omega_basic = FALSE;
-            theta_alpha->is_basic = FALSE;
-            theta_alpha->is_grad_hess = FALSE;
+            theta_x->is_omega_basic = FALSE;
+            theta_x->is_basic = FALSE;
+            theta_x->is_grad_hess = FALSE;
         }
     }
     else {
@@ -120,30 +120,30 @@ void initializeThetaAlpha(const mxArray *prhs, State_parameter *theta_alpha)
 
 
     // Initialize vector specification
-    if( theta_alpha->is_basic ) {
+    if( theta_x->is_basic ) {
         // Prepare mean vector for joint sampling
-        theta_alpha->mu_tm = (double *) mxMalloc( theta_alpha->n * sizeof(double) );
-        for(int i=0;i<theta_alpha->n;i++) { theta_alpha->mu_tm[i] = theta_alpha->alpha_mean; }
+        theta_x->mu_tm = (double *) mxMalloc( theta_x->n * sizeof(double) );
+        for(int i=0;i<theta_x->n;i++) { theta_x->mu_tm[i] = theta_x->x_mean; }
     }
     else {
-        theta_alpha->d_tm = readStateParameter(theta_alpha->n, pr_d);
-        theta_alpha->mu_tm = readStateParameter(theta_alpha->n, pr_mu);
-        theta_alpha->phi_tm = readStateParameter(theta_alpha->n, pr_phi);
-        theta_alpha->omega_tm = readStateParameter(theta_alpha->n, pr_omega);
+        theta_x->d_tm = readStateParameter(theta_x->n, pr_d);
+        theta_x->mu_tm = readStateParameter(theta_x->n, pr_mu);
+        theta_x->phi_tm = readStateParameter(theta_x->n, pr_phi);
+        theta_x->omega_tm = readStateParameter(theta_x->n, pr_omega);
                 
         // Reshape intercept parameters if both mean and intercept are supplied 
         if( pr_mu != NULL ) {
-            theta_alpha->d_tm[0] = theta_alpha->d_tm[0] + theta_alpha->mu_tm[0];
-            for(int i=1; i<theta_alpha->n; i++) {
-                theta_alpha->d_tm[i] = theta_alpha->d_tm[i] + theta_alpha->mu_tm[i] 
-                    - theta_alpha->phi_tm[i] * theta_alpha->mu_tm[i-1];
+            theta_x->d_tm[0] = theta_x->d_tm[0] + theta_x->mu_tm[0];
+            for(int i=1; i<theta_x->n; i++) {
+                theta_x->d_tm[i] = theta_x->d_tm[i] + theta_x->mu_tm[i] 
+                    - theta_x->phi_tm[i] * theta_x->mu_tm[i-1];
             }
         }
 
         // Adjust precision of initial state for basic model with mean vector and no intercept
-        if( pr_d != NULL && theta_alpha->is_phi_basic && theta_alpha->is_omega_basic ) {
-            theta_alpha->omega_tm[0] = 
-                theta_alpha->omega * (1 - theta_alpha->phi * theta_alpha->phi);
+        if( pr_d != NULL && theta_x->is_phi_basic && theta_x->is_omega_basic ) {
+            theta_x->omega_tm[0] = 
+                theta_x->omega * (1 - theta_x->phi * theta_x->phi);
         }
     }
 }
@@ -159,7 +159,7 @@ State *stateAlloc( void )
     state->max_iterations = MAX_ITERATIONS;
     state->max_iterations_safe = 5 * MAX_ITERATIONS;
     state->max_iterations_unsafe = MAX_ITERATIONS;
-    state->n_alpha_partials = N_ALPHA_PARTIALS;
+    state->n_x_partials = N_x_PARTIALS;
 
     return state;
 }
@@ -168,7 +168,7 @@ Theta *thetaAlloc( void )
 {
     Theta *theta = (Theta *) mxMalloc( sizeof(Theta) );
     theta->y = (Parameter *) mxMalloc( sizeof(Parameter) );
-    theta->alpha = (State_parameter *) mxMalloc( sizeof(State_parameter) );
+    theta->x = (State_parameter *) mxMalloc( sizeof(State_parameter) );
     return theta;
 }
 
@@ -183,7 +183,7 @@ mxArray *mxStateAlloc(int n, Observation_model *model, State *state)
     // List state field
     Field field[] = {
         // Computation variables
-        { "x", &(state->alpha) },
+        { "x", &(state->x) },
         { "Hb_0", &(state->Hb_0) },
         { "Hb_1", &(state->Hb_1) },
         { "cb", &(state->cb) },

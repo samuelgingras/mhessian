@@ -61,5 +61,5 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     plhs[0] = mxCreateDoubleMatrix( 1, 1, mxREAL ); 
 
     // Draw observations
-    model->log_f_y__theta_alpha( mxGetDoubles(prhs[1]) , theta->y, data, mxGetDoubles(plhs[0]) );
+    model->log_f_y__theta_x( mxGetDoubles(prhs[1]) , theta->y, data, mxGetDoubles(plhs[0]) );
 }

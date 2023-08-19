@@ -28,12 +28,12 @@
  
  Example of using verify macro:
  
-    verify(isfinite(skew.z), "Draw of alpha_t is infinite or not a number", "t=%d, n=%d", t, n);
+    verify(isfinite(skew.z), "Draw of x_t is infinite or not a number", "t=%d, n=%d", t, n);
  
  This should give a result such as:
-    Problem detected at line 278 of C source code file alpha_univariate.c, in function draw_HESSIAN
+    Problem detected at line 278 of C source code file x_univariate.c, in function draw_HESSIAN
     Iteration information: t=2390, n=2391
-    Problem: Draw of alpha_t is infinite or not a number
+    Problem: Draw of x_t is infinite or not a number
 */
 
 #define MatlabWarningFormat \
@@ -57,7 +57,7 @@ mexWarnMsgIdAndTxt("HESSIAN:generalError", MatlabWarningFormat, __LINE__, __FILE
 void compute_diagnostics(int t, State *state, Skew_parameters *skew)
 {
     // sigma is 1 over the square root of minus the 2nd derivative of the approximation of the log
-    // conditional density of alpha_t given alpha_{t+1}, y_1, ..., y_t.
+    // conditional density of x_t given x_{t+1}, y_1, ..., y_t.
     double sigma_m2 = -skew->h2;      // sigma^-2
     double sigma_2 = 1.0 / sigma_m2;  // sigma^2
     double sigma = sqrt(sigma_2);
@@ -67,7 +67,7 @@ void compute_diagnostics(int t, State *state, Skew_parameters *skew)
 
     // Contribution of contemporaneous observation to conditional precision
     // Should be between zero and one.
-    // This is not necessarily a good measure of distortion as log f(y_t|alpha_t) could be close to quadratic
+    // This is not necessarily a good measure of distortion as log f(y_t|x_t) could be close to quadratic
     state->psi2ratio[t] = -psi_t[2] * sigma_2;
     
     // Change in log density for a positive one-sigma change in x attributable to ...
@@ -91,55 +91,55 @@ void compute_diagnostics(int t, State *state, Skew_parameters *skew)
 // Computation: Prior sampling and log density evaluation                                        //
 // --------------------------------------------------------------------------------------------- //
 
-void alpha_prior_draw( State_parameter *theta_alpha, double *alpha )
+void x_prior_draw( State_parameter *theta_x, double *x )
 {
-    int t, n = theta_alpha->n;
-    if( theta_alpha->is_basic )
+    int t, n = theta_x->n;
+    if( theta_x->is_basic )
     {
-        double phi = theta_alpha->phi;
-        double stddev = sqrt( 1.0/theta_alpha->omega );
+        double phi = theta_x->phi;
+        double stddev = sqrt( 1.0/theta_x->omega );
         
-        alpha[0] = (stddev / sqrt(1-phi*phi)) * rng_gaussian();
+        x[0] = (stddev / sqrt(1-phi*phi)) * rng_gaussian();
         
         for( t=1; t<n; t++ )
-            alpha[t] = phi * alpha[t-1] + stddev * rng_gaussian();
+            x[t] = phi * x[t-1] + stddev * rng_gaussian();
         for( t=0; t<n; t++ )
-            alpha[t] += theta_alpha->alpha_mean;
+            x[t] += theta_x->x_mean;
     }
     else
     {
-        double *d_tm = theta_alpha->d_tm;
-        double *omega_tm = theta_alpha->omega_tm;
-        double *phi_tm = theta_alpha->phi_tm;
+        double *d_tm = theta_x->d_tm;
+        double *omega_tm = theta_x->omega_tm;
+        double *phi_tm = theta_x->phi_tm;
         double stddev = 1.0 / sqrt( omega_tm[0] );
         
-        alpha[0] = d_tm[0] + stddev * rng_gaussian();
+        x[0] = d_tm[0] + stddev * rng_gaussian();
         
         for( t=1; t<n; t++ ) {
             stddev = 1.0 / sqrt( omega_tm[t] );
-            alpha[t] = d_tm[t] + phi_tm[t] * alpha[t-1] + stddev * rng_gaussian();
+            x[t] = d_tm[t] + phi_tm[t] * x[t-1] + stddev * rng_gaussian();
         }
     }
 }
 
-void alpha_prior_eval( State_parameter *theta_alpha, double *alpha, double *log_p )
+void x_prior_eval( State_parameter *theta_x, double *x, double *log_p )
 {
-    int t,n = theta_alpha->n;
+    int t,n = theta_x->n;
     double result;
     
-    if( theta_alpha->is_basic )
+    if( theta_x->is_basic )
     {
-        double alpha_mean = theta_alpha->alpha_mean;
-        double phi = theta_alpha->phi;
-        double omega = theta_alpha->omega;
-        double diff_t = alpha[0] - alpha_mean;
+        double x_mean = theta_x->x_mean;
+        double phi = theta_x->phi;
+        double omega = theta_x->omega;
+        double diff_t = x[0] - x_mean;
         
         result = omega * (1-phi*phi) * diff_t * diff_t;
         
         for( t=1; t<n; t++ )
         {
             double diff_tm1 = diff_t;
-            diff_t = alpha[t] - alpha_mean;
+            diff_t = x[t] - x_mean;
             result += omega * (diff_t - phi * diff_tm1) * (diff_t - phi * diff_tm1);
         }
         
@@ -148,16 +148,16 @@ void alpha_prior_eval( State_parameter *theta_alpha, double *alpha, double *log_
     else
     {
         double log_det;
-        double *d_tm = theta_alpha->d_tm;
-        double *omega_tm = theta_alpha->omega_tm;
-        double *phi_tm = theta_alpha->phi_tm;
-        double diff_t = alpha[0] - d_tm[0];
+        double *d_tm = theta_x->d_tm;
+        double *omega_tm = theta_x->omega_tm;
+        double *phi_tm = theta_x->phi_tm;
+        double diff_t = x[0] - d_tm[0];
         
         result = omega_tm[0] * diff_t * diff_t;
         log_det = log( omega_tm[0] );
         
         for( t=1; t<n; t++ ) {
-            diff_t = alpha[t] - d_tm[t] - phi_tm[t] * alpha[t-1];
+            diff_t = x[t] - d_tm[t] - phi_tm[t] * x[t-1];
             result += omega_tm[t] * diff_t * diff_t;
             log_det += log( omega_tm[t] );
         }
@@ -168,23 +168,23 @@ void alpha_prior_eval( State_parameter *theta_alpha, double *alpha, double *log_
 
 
 static 
-void make_Hb_cb( State_parameter *theta_alpha, State *state )
+void make_Hb_cb( State_parameter *theta_x, State *state )
 {
     int t,n = state->n;
 	double *Hb_0 = state->Hb_0, *Hb_1 = state->Hb_1, *cb = state->cb;
 	
-    if( theta_alpha->is_basic ) {
-        double phi = theta_alpha->phi;
-        double omega = theta_alpha->omega;
-        double alpha_mean = theta_alpha->alpha_mean;
+    if( theta_x->is_basic ) {
+        double phi = theta_x->phi;
+        double omega = theta_x->omega;
+        double x_mean = theta_x->x_mean;
         
         double Hb_tt = omega * (1+phi*phi);
         double Hb_ttp1 = -omega * phi;
-        double cb_t = omega * (1-phi)*(1-phi) * alpha_mean;
+        double cb_t = omega * (1-phi)*(1-phi) * x_mean;
         
         Hb_0[0] = Hb_0[n-1] = omega;
         Hb_1[0] = Hb_ttp1;
-        cb[0] = cb[n-1] = omega * (1-phi) * alpha_mean;
+        cb[0] = cb[n-1] = omega * (1-phi) * x_mean;
         
         for( t=1; t<n-1; t++ ) {
             Hb_0[t] = Hb_tt;
@@ -193,9 +193,9 @@ void make_Hb_cb( State_parameter *theta_alpha, State *state )
         }
     }
     else {
-        double *phi_tm = theta_alpha->phi_tm;
-        double *omega_tm = theta_alpha->omega_tm;
-        double *d_tm = theta_alpha->d_tm;
+        double *phi_tm = theta_x->phi_tm;
+        double *omega_tm = theta_x->omega_tm;
+        double *d_tm = theta_x->d_tm;
         
         cb[0] = omega_tm[0] * d_tm[0];
         
@@ -327,18 +327,18 @@ void compute_Sigma_m_plus( State *state )
     }
 }
 
-static void alC_guess( State_parameter *theta_alpha, State *state )
+static void alC_guess( State_parameter *theta_x, State *state )
 {
     int t, n = state->n;
     double *alC = state->alC;
-    double *d_tm = theta_alpha->d_tm, *phi_tm = theta_alpha->phi_tm;
-    if( theta_alpha->is_basic ) {
+    double *d_tm = theta_x->d_tm, *phi_tm = theta_x->phi_tm;
+    if( theta_x->is_basic ) {
         alC[n-1] = state->m_prior[n-1];
         for( t=n-2; t>=0; t-- )
             alC[t] = state->ad_prior[t] * alC[t+1] + state->m_prior[t];
     }
     else {
-        alC[0] = theta_alpha->d_tm[0];
+        alC[0] = theta_x->d_tm[0];
         for( t=1; t<n; t++ )
             alC[t] = d_tm[t] + phi_tm[t] * alC[t-1];
     }
@@ -426,10 +426,10 @@ void compute_derivatives( Observation_model *model, State *state, int ad_add_onl
 	double *sd = state->sd, *sdd = state->sdd, *sddd = state->sddd;
 	double *Sigma = state->Sigma;
 	double *Hbb_1 = state->Hbb_1;
-	int n_alpha_partials = state->n_alpha_partials;
+	int n_x_partials = state->n_x_partials;
 	
 	if( ad_add_only )
-		n_alpha_partials = 2;
+		n_x_partials = 2;
     
 	double add_prev = 0.0, addd_prev = 0.0, adddd_prev = 0.0;
 	double mu_a_prev = 0.0, mud_ad_prev = 0.0, mudd_add_prev = 0.0;
@@ -443,18 +443,18 @@ void compute_derivatives( Observation_model *model, State *state, int ad_add_onl
 		double ad_t_2 = ad[t] * ad[t];
 		double ad_t_3 = ad_t_2 * ad[t];
         
-		if( n_alpha_partials >= 2 ) 
+		if( n_x_partials >= 2 ) 
 		{
 			double Z_1 = Sigma[t] * psi_t[3] + gamma_t * add_prev;
 			sd[t] = Z_1 * ad[t];
 			add[t] = Z_1 * ad_t_2;
-			if( n_alpha_partials >= 3 )
+			if( n_x_partials >= 3 )
 			{
 				double Z_2 = Sigma[t] * psi_t[4] + gamma_t * addd_prev;
 				double Z_1_2 = Z_1 * Z_1;
 				sdd[t] = (Z_2 + 2 * Z_1_2) * ad_t_2;
 				addd[t] = (Z_2 + 3 * Z_1_2) * ad_t_3;
-				if( n_alpha_partials >= 4 )
+				if( n_x_partials >= 4 )
 				{
 					double ad_t_4 = ad_t_3 * ad[t];
 					double Z_3 = Sigma[t] * psi_t[5] + gamma_t * adddd_prev;
@@ -553,7 +553,7 @@ int compute_alC( int trust_alC, int safe, Observation_model *model, Theta *theta
     double inf_norm_distance;
     
 	if( !trust_alC )
-        alC_guess( theta->alpha, state );
+        alC_guess( theta->x, state );
     
     int max_iterations = safe ? 5 * state->max_iterations : state->max_iterations;
     
@@ -579,11 +579,11 @@ int compute_alC( int trust_alC, int safe, Observation_model *model, Theta *theta
 
 void compute_alC_all( Observation_model *model, Theta *theta, State *state, Data *data )
 {
-    make_Hb_cb( theta->alpha, state );
+    make_Hb_cb( theta->x, state );
     compute_prior_Sigma_ad( state );
     
     if( !state->guess_alC )
-        alC_guess(theta->alpha, state);
+        alC_guess(theta->x, state);
     
     // At first trust_alC = TRUE by default
     if( !compute_alC( TRUE, FALSE, model, theta, state, data ) )
@@ -600,7 +600,7 @@ void compute_alC_all( Observation_model *model, Theta *theta, State *state, Data
 void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *state, Data *data, double *log_q )
 {
     int t, n = state->n;
-    double *alpha = state->alpha;
+    double *x = state->x;
     double *alC = state->alC;
     double *b = state->b, *bd = state->bd, *bdd = state->bdd, *bddd = state->bddd;
     double *mu = state->mu, *mud = state->mud, *mudd = state->mudd;
@@ -656,7 +656,7 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         double h1 = cb[t] - Hb_0[t]*bttp + psi_b_t[1];
         
         if( t<n-1 )
-            h1 -= Hb_1[t] * alpha[t+1];
+            h1 -= Hb_1[t] * x[t+1];
         
         /* Initialize skew */
         Skew_parameters skew;
@@ -679,7 +679,7 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         skew.u_sign = state->sign;
         skew.is_draw = isDraw;
         skew.n_reject = 0;  // SG: need to be initialize for verify(..)
-        skew.z = alpha[t];
+        skew.z = x[t];
         
         // Draw/Eval
         skew_draw_eval( &skew, sh, K_1_threshold, K_2_threshold );
@@ -704,12 +704,12 @@ void draw_HESSIAN(int isDraw, Observation_model *model,Theta *theta, State *stat
         if( state->fatal_error_detected ) return;
 
 
-        alpha[t] = skew.z;
+        x[t] = skew.z;
         
         *log_q += skew.log_density;
-        d1 = alpha[t] - alC[t];
+        d1 = x[t] - alC[t];
         
         state->a[t] = d1;
-        state->eps[t] = alpha[t] - bttp;
+        state->eps[t] = x[t] - bttp;
 	}
 }

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "mex.h"
-#include "alpha_univariate.h"
+#include "x_univariate.h"
 #include "state.h"
 #include "errors.h"
 #include "RNG.h"
@@ -44,14 +44,14 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         mxArray *pr_theta_x = mxGetField( prhs[0], 0, "x" );
 
         if( pr_theta_x == NULL )
-            initializeThetaAlpha( prhs[0], theta->alpha );
+            initializeThetax( prhs[0], theta->x );
         else
-            initializeThetaAlpha( pr_theta_x, theta->alpha );
+            initializeThetax( pr_theta_x, theta->x );
     
         // Prepare output argument
-        plhs[0] = mxCreateDoubleMatrix( (mwSize)theta->alpha->n, 1, mxREAL );
+        plhs[0] = mxCreateDoubleMatrix( (mwSize)theta->x->n, 1, mxREAL );
     
         // Draw state vector
-        alpha_prior_draw( theta->alpha, mxGetDoubles(plhs[0]) );    
+        x_prior_draw( theta->x, mxGetDoubles(plhs[0]) );    
     }
 }

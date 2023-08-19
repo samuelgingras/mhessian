@@ -156,9 +156,9 @@ void compute_grad_Hess(
     double *sdd = state->sdd;       // 2nd derivative of log(Sigma)
     double *sddd = state->sddd;     // 3rd derivative of log(Sigma)
              
-    double *mu = theta->alpha->mu_tm;       // Prior mean of x, as a vector
-    double phi = theta->alpha->phi;         // Autocorrelation parameter of x_t process
-    double omega = theta->alpha->omega;     // Innovation precision parameter of x_t process
+    double *mu = theta->x->mu_tm;       // Prior mean of x, as a vector
+    double phi = theta->x->phi;         // Autocorrelation parameter of x_t process
+    double omega = theta->x->omega;     // Innovation precision parameter of x_t process
 
     int nQ = long_th ? 5 : 3;
     int nC = long_th ? 7 : 3; // Was 6 : 3. Need to put (1,2) as 4th, not 7th C

@@ -98,7 +98,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 
 }
@@ -138,7 +138,7 @@ void initializeData(const mxArray *prhs, Data *data)
     }
 }
 
-static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
+static void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 {
     int n = data->n;
     int m = theta_y->m;
@@ -160,30 +160,30 @@ static void draw_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data)
             k++;
 
         // Draw observation
-        data->y[t] = exp(alpha[t]) / lambda[k] * rng_gamma(kappa[k],1);
+        data->y[t] = exp(x[t]) / lambda[k] * rng_gamma(kappa[k],1);
     }
 }
 
-static double log_f_y__theta_alpha_t(
+static double log_f_y__theta_x_t(
     int m,
     double *cte,
     double *p, 
     double *kappa, 
     double *lambda,
     double y_t,
-    double alpha_t
+    double x_t
     )
 {
     double result = 0.0;
     for( int j=0; j<m; j++ ) {
-        double y_jt = lambda[j] * y_t * exp(-alpha_t);
-        double f_y_jt = pow(y_t, kappa[j]-1) * exp(-y_jt - kappa[j] * alpha_t);
+        double y_jt = lambda[j] * y_t * exp(-x_t);
+        double f_y_jt = pow(y_t, kappa[j]-1) * exp(-y_jt - kappa[j] * x_t);
         result += p[j] * cte[j] * f_y_jt;
     }
     return log(result);
 }
 
-static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+static void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int m = theta_y->m;
     double *cte = theta_y->cte_tm;
@@ -193,7 +193,7 @@ static void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, 
 
     *log_f = 0.0;
     for(int t=0; t<data->n; t++)
-        *log_f += log_f_y__theta_alpha_t( m, cte, p, kappa, lambda, data->y[t], alpha[t] );
+        *log_f += log_f_y__theta_x_t( m, cte, p, kappa, lambda, data->y[t], x[t] );
 }
 
 static inline void derivative(
@@ -203,7 +203,7 @@ static inline void derivative(
     double *kappa,
     double *lambda,
     double y_t,
-    double alpha_t,
+    double x_t,
     double *psi_t
     )
 {   
@@ -217,10 +217,10 @@ static inline void derivative(
     for( int j=0; j<m; j++ ) {
 
         // Step 1: Direct computation
-        h_jt[3] = h_jt[5] = lambda[j] * y_t * exp(-alpha_t);
+        h_jt[3] = h_jt[5] = lambda[j] * y_t * exp(-x_t);
         h_jt[2] = h_jt[4] = -h_jt[3];
         h_jt[1] = h_jt[3] - kappa[j];
-        h_jt[0] = h_jt[2] - kappa[j]*alpha_t;
+        h_jt[0] = h_jt[2] - kappa[j]*x_t;
 
         // Step 2: Faa di Bruno with g(x) = exp(h(x))
         q[0]= exp(h_jt[0]);
@@ -252,7 +252,7 @@ static inline void derivative(
     compute_Faa_di_Bruno(5, q, f_t, psi_t);
 }
 
-static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha, double *psi_t)
+static void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
     int m = theta->y->m;
     double *cte = theta->y->cte_tm;
@@ -260,7 +260,7 @@ static void compute_derivatives_t(Theta *theta, Data *data, int t, double alpha,
     double *kappa = theta->y->kappa_tm;
     double *lambda = theta->y->lambda_tm;
 
-    derivative( m, cte, p, kappa, lambda, data->y[t], alpha, psi_t );
+    derivative( m, cte, p, kappa, lambda, data->y[t], x, psi_t );
 }
 
 static void compute_derivatives(Theta *theta, State *state, Data *data)
@@ -268,7 +268,7 @@ static void compute_derivatives(Theta *theta, State *state, Data *data)
 
     int n = state->n;
     double *y = data->y;
-    double *alpha = state->alC;
+    double *x = state->alC;
 
     int m =  theta->y->m;
     double *cte = theta->y->cte_tm;
@@ -278,7 +278,7 @@ static void compute_derivatives(Theta *theta, State *state, Data *data)
 
     for( int t=0; t<n; t++ ) {
         double *psi_t = state->psi + t * state->psi_stride;
-        derivative( m, cte, p, kappa, lambda, y[t], alpha[t], psi_t );
+        derivative( m, cte, p, kappa, lambda, y[t], x[t], psi_t );
     }
 }
 
@@ -300,8 +300,8 @@ void initializeModel()
     mix_gamma_SS.initializeTheta = initializeTheta;
     mix_gamma_SS.initializeParameter = initializeParameter;
     
-    mix_gamma_SS.draw_y__theta_alpha = draw_y__theta_alpha;
-    mix_gamma_SS.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    mix_gamma_SS.draw_y__theta_x = draw_y__theta_x;
+    mix_gamma_SS.log_f_y__theta_x = log_f_y__theta_x;
     
     mix_gamma_SS.compute_derivatives_t = compute_derivatives_t;
     mix_gamma_SS.compute_derivatives = compute_derivatives;

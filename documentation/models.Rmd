@@ -13,7 +13,7 @@ For positive real observations: $y_t \in [0,\infty)$.
 \]
 \[
     f(\epsilon_t | \eta, \kappa, \lambda) = \eta \kappa \lambda
-    \frac{(\lambda \epsilon_t)^{\eta - 1}}{[1 + (\lambda\epsilon_t)^\eta)^{\kappa + 1}]}
+    \frac{(\lambda \epsilon_t)^{\eta - 1}}{[1 + (\lambda\epsilon_t)^\eta)]^{\kappa + 1}}
 \]
 
 Note that the scale parameter $\lambda$ is not set to make $E[\epsilon_t] = 1$, as in the exponential, gamma and Weibull state space models, since the Burr mean is not a straightforward function of $\lambda$.

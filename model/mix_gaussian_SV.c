@@ -86,7 +86,7 @@ void initializeTheta(const mxArray *prhs, Theta *theta)
             "Nested structure input: Field 'y' required.");
 
     // Read state and model parameters
-    initializeThetaAlpha( pr_theta_x, theta->alpha );
+    initializeThetax( pr_theta_x, theta->x );
     initializeParameter( pr_theta_y, theta->y );
 }
 
@@ -126,7 +126,7 @@ void initializeData(const mxArray *prhs, Data *data)
 }
 
 static
-void draw_y__theta_alpha( double *alpha, Parameter *theta_y, Data *data )
+void draw_y__theta_x( double *x, Parameter *theta_y, Data *data )
 {
     int t,j;
     int n = data->n;
@@ -151,12 +151,12 @@ void draw_y__theta_alpha( double *alpha, Parameter *theta_y, Data *data )
             k++;
         
         // Draw data
-        data->y[t] = exp(0.5*alpha[t]) * ( mu[k] + sigma[k]*rng_gaussian() );
+        data->y[t] = exp(0.5*x[t]) * ( mu[k] + sigma[k]*rng_gaussian() );
     }
 }
 
 static
-void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
 {
     int t,j;
     int n = data->n;
@@ -170,18 +170,18 @@ void log_f_y__theta_alpha(double *alpha, Parameter *theta_y, Data *data, double 
     for( t=0; t<n; t++ )
     {
         double f_t = 0.0;
-        double z_t = data->y[t] * exp(-0.5 * alpha[t]);
+        double z_t = data->y[t] * exp(-0.5 * x[t]);
         for( j=0; j<m; j++ )
         {
             double z_t_j = (z_t - mu[j]) / sigma[j];
-            f_t += p[j] / sigma[j] * exp(-0.5 * (z_t_j*z_t_j + alpha[t]));
+            f_t += p[j] / sigma[j] * exp(-0.5 * (z_t_j*z_t_j + x[t]));
         }
         *log_f += log(f_t);
     }
 }
 
 static inline
-void derivative(double y_t, double alpha_t, int m, double *p, double *mu, double *sigma,
+void derivative(double y_t, double x_t, int m, double *p, double *mu, double *sigma,
     double *psi_t)
 {
     int j,d;
@@ -196,12 +196,12 @@ void derivative(double y_t, double alpha_t, int m, double *p, double *mu, double
         double y_t_j = y_t / sigma[j];
         double mu_sigma_j = mu[j] / sigma[j];
 
-        double A = y_t_j * y_t_j * exp(-alpha_t);
-        double B = y_t_j * mu_sigma_j * exp(-0.5 * alpha_t);
+        double A = y_t_j * y_t_j * exp(-x_t);
+        double B = y_t_j * mu_sigma_j * exp(-0.5 * x_t);
         double C = mu_sigma_j * mu_sigma_j;
         
         // Step 1 : Direct computation 	
-        h_jt[0] = -0.5 * ( A - 2*B + C + alpha_t );
+        h_jt[0] = -0.5 * ( A - 2*B + C + x_t );
         h_jt[1] = -0.5 * (-A + B + 1 );
         h_jt[2] = -0.5 * ( A - 0.5*B );
         h_jt[3] = -0.5 * (-A + 0.25*B );
@@ -236,14 +236,14 @@ void derivative(double y_t, double alpha_t, int m, double *p, double *mu, double
 }
 
 static
-void compute_derivatives_t( Theta *theta, Data *data, int t, double alpha, double *psi_t )
+void compute_derivatives_t( Theta *theta, Data *data, int t, double x, double *psi_t )
 {
     int m = theta->y->m;
     double *p = theta->y->p_tm;
     double *mu = theta->y->mu_tm;
     double *sigma = theta->y->sigma_tm;
     
-    derivative(data->y[t], alpha, m, p, mu, sigma, psi_t);
+    derivative(data->y[t], x, m, p, mu, sigma, psi_t);
 }
 
 static
@@ -253,13 +253,13 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
     double *p = theta->y->p_tm;
     double *mu = theta->y->mu_tm;
     double *sigma = theta->y->sigma_tm;
-    double *alpha = state->alC; 
+    double *x = state->alC; 
     
     double *psi_t;
     int t, n = state->n;
     
     for(t=0, psi_t = state->psi; t < n; t++, psi_t += state->psi_stride )
-        derivative(data->y[t], alpha[t], m, p, mu, sigma, psi_t);
+        derivative(data->y[t], x[t], m, p, mu, sigma, psi_t);
 }
 
 static
@@ -280,8 +280,8 @@ void initializeModel()
     mix_gaussian_SV.initializeTheta = initializeTheta;
     mix_gaussian_SV.initializeParameter = initializeParameter;
     
-    mix_gaussian_SV.draw_y__theta_alpha = draw_y__theta_alpha;
-    mix_gaussian_SV.log_f_y__theta_alpha = log_f_y__theta_alpha;
+    mix_gaussian_SV.draw_y__theta_x = draw_y__theta_x;
+    mix_gaussian_SV.log_f_y__theta_x = log_f_y__theta_x;
     
     mix_gaussian_SV.compute_derivatives_t = compute_derivatives_t;
     mix_gaussian_SV.compute_derivatives = compute_derivatives;
