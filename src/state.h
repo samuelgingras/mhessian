@@ -47,13 +47,6 @@ typedef struct {
 } Parameter;
 
 typedef struct {
-    char *name;
-    int row_dimension_index;
-    int col_dimension_index;
-    int (*verify)(int n_elements, double *p);
-} Parameter_specification;
-
-typedef struct {
     int n;
     int is_basic;
 
@@ -149,6 +142,7 @@ typedef struct {
 } State;
 
 typedef struct {
+    char *name;
     void (*initializeModel)(void);
     void (*initializeData)(const mxArray *prhs, Data *data);    
     void (*initializeTheta)(const mxArray *prhs, Theta *theta);
@@ -171,9 +165,10 @@ typedef struct {
     double **C_field_pointer;
 } Field;
 
-void initializeThetax( const mxArray *prhs, State_parameter *theta_x );
-State *stateAlloc( void );
-Theta *thetaAlloc( void );
-Data *dataAlloc( void );
-mxArray *mxStateAlloc( int n, Observation_model *model, State *state );
+Observation_model *assignModel(const mxArray *mx_model);
+void initializeThetax(const mxArray *prhs, State_parameter *theta_x);
+State *stateAlloc(void);
+Theta *thetaAlloc(void);
+Data *dataAlloc(void);
+mxArray *mxStateAlloc(int n, Observation_model *model, State *state);
 #endif

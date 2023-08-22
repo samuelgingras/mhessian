@@ -14,34 +14,34 @@
 #define TRUE    1
 #define FALSE   0
 
-static double *readStateParameter(int n, const mxArray *prhs)
+static double *readStateParameter(int n, const mxArray *mx_theta_x_i)
 {
     // 
     double *x_tm = (double *) mxCalloc(n, sizeof(double));
     
-    if( prhs != NULL ) {
-        if(mxIsScalar(prhs)) {
-            double x = mxGetScalar(prhs);
+    if( mx_theta_x_i != NULL ) {
+        if(mxIsScalar(mx_theta_x_i)) {
+            double x = mxGetScalar(mx_theta_x_i);
             for(int i=0; i<n; i++)
                 x_tm[i] = x;
         }
         else {
-            mxCheckVector(prhs);
-            mxCheckVectorSize(n, prhs);
-            memcpy(x_tm, mxGetPr(prhs), n*sizeof(double));
+            mxCheckVector(mx_theta_x_i);
+            mxCheckVectorSize(n, mx_theta_x_i);
+            memcpy(x_tm, mxGetPr(mx_theta_x_i), n*sizeof(double));
         }
     }
     return x_tm;
 }
 
-void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
+void initializeThetax(const mxArray *mx_theta_x, State_parameter *theta_x)
 {
     // Set pointer to each field
-    mxArray *pr_N = mxGetField(prhs,0,"N");
-    mxArray *pr_d = mxGetField(prhs,0,"d");
-    mxArray *pr_mu = mxGetField(prhs,0,"mu");
-    mxArray *pr_phi = mxGetField(prhs,0,"phi");
-    mxArray *pr_omega = mxGetField(prhs,0,"omega");
+    mxArray *pr_N = mxGetField(mx_theta_x, 0, "N");
+    mxArray *pr_d = mxGetField(mx_theta_x, 0, "d");
+    mxArray *pr_mu = mxGetField(mx_theta_x, 0, "mu");
+    mxArray *pr_phi = mxGetField(mx_theta_x, 0, "phi");
+    mxArray *pr_omega = mxGetField(mx_theta_x, 0, "omega");
     
     // Check for missing field
     ErrMsgTxt( pr_N != NULL,
@@ -59,13 +59,13 @@ void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
     
 
     // Check if model as mean or intercept parameter
-    if( pr_d == NULL && pr_mu == NULL ) {
+    if (pr_d == NULL && pr_mu == NULL) {
         theta_x->x_mean = 0.0;
     }
 
     // Check intercept parameter
-    if( pr_d != NULL) {
-        if( mxIsScalar(pr_d) ) {
+    if (pr_d != NULL) {
+        if (mxIsScalar(pr_d)) {
             mexErrMsgIdAndTxt("mhessian:invalidrhs", "Intercept: vector input required.");
         }
         else {
@@ -75,8 +75,8 @@ void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
     }
 
     // Check mean parameter
-    if( pr_mu != NULL ) {
-        if( mxIsScalar(pr_mu) ) {
+    if (pr_mu != NULL) {
+        if (mxIsScalar(pr_mu)) {
             theta_x->is_mu_basic = TRUE;
             theta_x->x_mean = mxGetScalar(pr_mu);
         }
@@ -87,7 +87,7 @@ void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
     }
 
     //  Check autocorrelation parameter
-    if( pr_phi != NULL ) {
+    if (pr_phi != NULL) {
         if( mxIsScalar(pr_phi) ) {
             theta_x->is_phi_basic = TRUE;
             theta_x->phi = mxGetScalar(pr_phi);
@@ -103,8 +103,8 @@ void initializeThetax(const mxArray *prhs, State_parameter *theta_x)
     }
 
     // Check precision parameter
-    if( pr_omega != NULL ) {
-        if( mxIsScalar(pr_omega) ) {
+    if (pr_omega != NULL) {
+        if (mxIsScalar(pr_omega)) {
             theta_x->is_omega_basic = TRUE;
             theta_x->omega = mxGetScalar(pr_omega);
         }

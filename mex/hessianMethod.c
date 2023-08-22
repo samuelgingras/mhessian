@@ -43,14 +43,11 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     }
     else {
         // Check input and output arguments
-        ErrMsgTxt( nrhs >= 3,
-        "Invalid inputs: Three input arguments expected");
-        
-        ErrMsgTxt( nlhs <= 2,
-        "Invalid outputs: One or Two output argument expected");
-                
+        ErrMsgTxt(nrhs >= 3, "Invalid inputs: Three input arguments expected");
+        ErrMsgTxt(nlhs <= 2, "Invalid outputs: One or Two output argument expected");
+
         // Assign model
-        Observation_model *model = assignModel( prhs[0] );
+        Observation_model *model = assignModel(prhs[0]);
 
         // Allocate memory structure
         Theta *theta = thetaAlloc();
@@ -59,18 +56,15 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 
         // Initialize
         model->initializeModel();
-        model->initializeData( prhs[1], data );
-        model->initializeTheta( prhs[2], theta );
+        model->initializeData(prhs[1], data);
+        model->initializeTheta(prhs[2], theta);
         
         // Initialize mxState
         mxArray *mxState = mxStateAlloc(theta->x->n, model, state);
         
-        // TODO: change function to check input compatibility
-        // Set model specific function ?
-
         // Check observation data
-        ErrMsgTxt( data->m == theta->x->n,
-        "Invalid input argument: incompatible vector length");
+        ErrMsgTxt(data->m == theta->x->n,
+                  "Invalid input argument: incompatible vector length");
         
         // Create/set field pointer for output structure
         mxArray *x = mxGetField(mxState,0,"x");

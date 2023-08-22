@@ -265,7 +265,7 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
 static
 void initializeModel(void);
 
-Observation_model mix_gaussian_SV = { initializeModel, 0 };
+Observation_model mix_gaussian_SV = {"mix_gaussian_SV", initializeModel, 0};
 
 static
 void initializeModel()

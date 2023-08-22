@@ -1,9 +1,8 @@
-#include "mex.h"
 #include "state.h"
 
-#ifndef MEX_MODEL
-#define MEX_MODEL
+#ifndef MODEL
+#define MODEL
 
-Observation_model *assignModel(const mxArray *prhs);
+Observation_model *findModel(char *name);
 
 #endif

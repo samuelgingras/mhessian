@@ -121,7 +121,7 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
 static
 void initializeModel(void);
 
-Observation_model gaussian_SV = { initializeModel, 0 };
+Observation_model gaussian_SV = {"gaussian_SV", initializeModel, 0 };
 
 static
 void initializeModel()

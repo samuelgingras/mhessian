@@ -285,7 +285,7 @@ static void compute_derivatives(Theta *theta, State *state, Data *data)
 static
 void initializeModel(void);
 
-Observation_model mix_gamma_SS = { initializeModel, 0 };
+Observation_model mix_gamma_SS = {"mix_gamma_SS", initializeModel, 0};
 
 static
 void initializeModel()

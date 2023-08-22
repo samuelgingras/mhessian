@@ -165,7 +165,7 @@ void compute_derivatives( Theta *theta, State *state, Data *data )
 static 
 void initializeModel(void);
 
-Observation_model student_SV = { initializeModel, 0 };
+Observation_model student_SV = {"student_SV", initializeModel, 0};
 
 static
 void initializeModel()
