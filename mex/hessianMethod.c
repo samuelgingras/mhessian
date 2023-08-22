@@ -57,7 +57,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         // Initialize
         model->initializeModel();
         model->initializeData(prhs[1], data);
-        model->initializeTheta(prhs[2], theta);
+        initialize_theta(model, prhs[2], theta);
         
         // Initialize mxState
         mxArray *mxState = mxStateAlloc(theta->x->n, model, state);

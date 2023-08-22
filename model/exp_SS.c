@@ -17,23 +17,6 @@ static char *usage_string =
 "Extra parameters: none\n";
 
 static
-void initializeTheta(const mxArray *prhs, Theta *theta)
-{
-    // Check if structure input
-    if( !mxIsStruct(prhs) )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Structure input required.");
-
-    // Check if nested structure
-    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
-
-    if( pr_theta_x != NULL )
-        initializeThetax( pr_theta_x, theta->x );
-    else
-        initializeThetax( prhs, theta->x );
-}
-
-static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
     // No model parameter to initialize
@@ -131,7 +114,6 @@ void initializeModel()
     exp_SS.usage_string = usage_string;
     
     exp_SS.initializeData = initializeData;    
-    exp_SS.initializeTheta = initializeTheta;
     exp_SS.initializeParameter = initializeParameter;
     
     exp_SS.draw_y__theta_x = draw_y__theta_x;

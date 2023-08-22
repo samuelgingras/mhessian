@@ -39,32 +39,6 @@ static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
     theta_y->r = mxGetScalar(pr_r);
 }
 
-static void initializeTheta(const mxArray *prhs, Theta *theta)
-{
-
-    // Check structure input
-    if( !mxIsStruct(prhs) )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Structure input required.");
-
-    // Check nested structure
-    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
-    mxArray *pr_theta_y = mxGetField( prhs, 0, "y" );
-
-    if( pr_theta_x == NULL )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Nested structure input: Field 'x' required.");
-
-    if( pr_theta_y == NULL )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Nested structure input: Field 'y' required.");
-
-    // Read state and model parameters
-    initializeThetax( pr_theta_x, theta->x );
-    initializeParameter( pr_theta_y, theta->y );
-
-}
-
 static
 void initializeData(const mxArray *prhs, Data *data)
 {
@@ -178,7 +152,6 @@ void initializeModel()
     gammapoisson_SS.usage_string = usage_string;
     
     gammapoisson_SS.initializeData = initializeData;
-    gammapoisson_SS.initializeTheta = initializeTheta;
     gammapoisson_SS.initializeParameter = initializeParameter;
     
     gammapoisson_SS.draw_y__theta_x = draw_y__theta_x;

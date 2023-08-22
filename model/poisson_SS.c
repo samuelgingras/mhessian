@@ -21,23 +21,6 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 }
 
 static
-void initializeTheta(const mxArray *prhs, Theta *theta)
-{
-    // Check if structure input
-    if( !mxIsStruct(prhs) )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Structure input required.");
-
-    // Check if nested structure
-    mxArray *pr_theta_x = mxGetField( prhs, 0, "x" );
-
-    if( pr_theta_x != NULL )
-        initializeThetax( pr_theta_x, theta->x );
-    else
-        initializeThetax( prhs, theta->x );
-}
-
-static
 void initializeData(const mxArray *prhs, Data *data)
 {
     if( mxIsStruct(prhs) )
@@ -132,7 +115,6 @@ void initializeModel()
     poisson_SS.usage_string = usage_string;
     
     poisson_SS.initializeData = initializeData;
-    poisson_SS.initializeTheta = initializeTheta;
     poisson_SS.initializeParameter = initializeParameter;
     
     poisson_SS.draw_y__theta_x = draw_y__theta_x;

@@ -144,9 +144,8 @@ typedef struct {
 typedef struct {
     char *name;
     void (*initializeModel)(void);
-    void (*initializeData)(const mxArray *prhs, Data *data);    
-    void (*initializeTheta)(const mxArray *prhs, Theta *theta);
-    void (*initializeParameter)(const mxArray *prhs, Parameter *theta_y);
+    void (*initializeData)(const mxArray *mx_data, Data *data);    
+    void (*initializeParameter)(const mxArray *mx_theta_y, Parameter *theta_y);
     
     void (*draw_y__theta_x)(double *x, Parameter *theta_y, Data *data);
     void (*log_f_y__theta_x)(double *x, Parameter *theta_y, Data *data, double *log_f);
@@ -166,7 +165,8 @@ typedef struct {
 } Field;
 
 Observation_model *assignModel(const mxArray *mx_model);
-void initializeThetax(const mxArray *prhs, State_parameter *theta_x);
+void initialize_theta(Observation_model *model, const mxArray *mx_theta, Theta *theta);
+void initializeThetax(const mxArray *mx_theta_x, State_parameter *theta_x);
 State *stateAlloc(void);
 Theta *thetaAlloc(void);
 Data *dataAlloc(void);
