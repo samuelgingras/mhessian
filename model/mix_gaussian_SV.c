@@ -66,41 +66,6 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 }
 
 static
-void initializeData(const mxArray *prhs, Data *data)
-{
-    if( mxIsStruct(prhs) )
-    {
-        mxArray *pr_y = mxGetField( prhs, 0, "y" );
-
-        if( pr_y == NULL )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
-                "Structure input: Field 'y' required.");
-
-        if( !mxIsDouble(pr_y) )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Vector of double required.");
-
-        if( mxGetN(pr_y) != 1 )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Column vector required.");
-
-        data->n = mxGetM(pr_y);
-        data->m = mxGetM(pr_y);
-        data->y = mxGetDoubles(pr_y);
-    }
-    else
-    {
-        if( !mxIsDouble(prhs) || mxGetN(prhs) != 1 )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Column vector of double required.");
-
-        data->n = mxGetM(prhs);
-        data->m = mxGetM(prhs);
-        data->y = mxGetDoubles(prhs);
-    }
-}
-
-static
 void draw_y__theta_x( double *x, Parameter *theta_y, Data *data )
 {
     int t,j;
@@ -251,7 +216,6 @@ void initializeModel()
     
     mix_gaussian_SV.usage_string = usage_string;
     
-    mix_gaussian_SV.initializeData = initializeData;
     mix_gaussian_SV.initializeParameter = initializeParameter;
     
     mix_gaussian_SV.draw_y__theta_x = draw_y__theta_x;

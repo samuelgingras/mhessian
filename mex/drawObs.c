@@ -42,7 +42,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         Data *data = dataAlloc();
 
         // Assign and initialize model
-        Observation_model *model = assignModel( prhs[1] );
+        Observation_model *model = assignModel(prhs[1]);
         model->initializeModel();
 
         // Read model parameters

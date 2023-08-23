@@ -22,7 +22,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     // Assign and initialize model
     Observation_model *model = assignModel( prhs[2] );
     model->initializeModel();
-    model->initializeData( prhs[0], data );
+    initialize_data(model, prhs[0], data);
 
     // Read model parameters
     if( model->n_theta > 0 )

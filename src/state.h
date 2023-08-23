@@ -47,6 +47,27 @@ typedef struct {
 } Parameter;
 
 typedef struct {
+    char *name;
+    int n_rows;
+    int n_cols;
+    double *p;
+} Matrix;
+
+typedef struct {
+    int n_dimension_parameters;
+    int *dimension_parameters;
+    int n_matrices;
+    Matrix *matrix;
+} Theta_y;
+
+typedef struct {
+    char *name;
+    int row_dimension_index;
+    int col_dimension_index;
+    int (*verify)(Matrix *matrix);
+} Theta_y_constraints;
+
+typedef struct {
     int n;
     int is_basic;
 
@@ -144,7 +165,7 @@ typedef struct {
 typedef struct {
     char *name;
     void (*initializeModel)(void);
-    void (*initializeData)(const mxArray *mx_data, Data *data);    
+    Theta_y_constraints *theta_y_constraints;
     void (*initializeParameter)(const mxArray *mx_theta_y, Parameter *theta_y);
     
     void (*draw_y__theta_x)(double *x, Parameter *theta_y, Data *data);
@@ -155,6 +176,7 @@ typedef struct {
     
     char *usage_string;
     int n_theta;
+    int n_dimension_parameters;
     int n_partials_t;
     int n_partials_tp1;
 } Observation_model;
@@ -166,7 +188,11 @@ typedef struct {
 
 Observation_model *assignModel(const mxArray *mx_model);
 void initialize_theta(Observation_model *model, const mxArray *mx_theta, Theta *theta);
+void initialize_data(Observation_model *model, const mxArray *mx_data, Data *data);
 void initializeThetax(const mxArray *mx_theta_x, State_parameter *theta_x);
+void initialize_theta_y(Observation_model *model, const mxArray *mx_theta_y, Theta_y *theta_y);
+
+Theta_y *theta_y_alloc(Observation_model *model);
 State *stateAlloc(void);
 Theta *thetaAlloc(void);
 Data *dataAlloc(void);

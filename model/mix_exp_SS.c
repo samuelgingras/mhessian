@@ -18,6 +18,31 @@ static char *usage_string =
 "\tw_j\t Component weight of the jth exponential distribution\n"
 "\tlambda_j\t Shape parameter of the jth exponential distribution";
 
+static int all_positive(Matrix *matrix) {
+    int n_elements = matrix->n_rows * matrix->n_cols;
+    for (int i=0; i < n_elements; i++)
+        if (matrix->p[i] < 0)
+            return 0;
+    return 1;
+}
+
+static int column_stochastic(Matrix *matrix) {
+    for (int col=0; col < matrix->n_cols; col++) {
+        double sum = 0.0;
+        for (int row=0; row < matrix->n_rows; row++)
+            sum += matrix->p[row + col*matrix->n_rows];
+        if (fabs(sum-1.0) > 1e-9)
+            return 0;
+    }
+    return 1;
+}
+
+static int n_dimension_parameters = 1;
+static Theta_y_constraints theta_y_constraints[] = {
+    {"p", 0, -1, column_stochastic},
+    {"lambda", 0, -1, all_positive}
+};
+
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 {
@@ -51,41 +76,6 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
     theta_y->m = mxGetM(pr_p);
     theta_y->p_tm = mxGetDoubles(pr_p);
     theta_y->lambda_tm = mxGetDoubles(pr_lambda);
-}
-
-static
-void initializeData(const mxArray *prhs, Data *data)
-{
-    if( mxIsStruct(prhs) )
-    {
-        mxArray *pr_y = mxGetField( prhs, 0, "y" );
-
-        if( pr_y == NULL )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:missingInputs",
-                "Structure input: Field 'y' required.");
-
-        if( !mxIsDouble(pr_y) )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Vector of double required.");
-
-        if( mxGetN(pr_y) != 1 )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Column vector required.");
-
-        data->n = mxGetM(pr_y);
-        data->m = mxGetM(pr_y);
-        data->y = mxGetDoubles(pr_y);
-    }
-    else
-    {
-        if( !mxIsDouble(prhs) && mxGetN(prhs) != 1 )
-            mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-                "Column vector of double required.");
-
-        data->n = mxGetM(prhs);
-        data->m = mxGetM(prhs);
-        data->y = mxGetDoubles(prhs);
-    }
 }
 
 static 
@@ -188,7 +178,7 @@ void derivative(double y_t, double x_t, int m, double *p, double *lambda, double
         
         // Step 3: Direct computation
         for(int d=0; d<6; d++)
-                p_t[d] +=  p[j] * lambda[j] * g_jt[d];
+            p_t[d] +=  p[j] * lambda[j] * g_jt[d];
     }
     
     // Step 4: Faa di Bruno with f(x) = log(x)
@@ -241,12 +231,13 @@ static
 void initializeModel()
 {
     mix_exp_SS.n_theta = n_theta;
+    mix_exp_SS.n_dimension_parameters = n_dimension_parameters;
     mix_exp_SS.n_partials_t = n_partials_t;
     mix_exp_SS.n_partials_tp1 = n_partials_tp1;
     
     mix_exp_SS.usage_string = usage_string;
     
-    mix_exp_SS.initializeData = initializeData;
+    mix_exp_SS.theta_y_constraints = theta_y_constraints;
     mix_exp_SS.initializeParameter = initializeParameter;
     
     mix_exp_SS.draw_y__theta_x = draw_y__theta_x;

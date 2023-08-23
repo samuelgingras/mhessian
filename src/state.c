@@ -164,6 +164,18 @@ State *stateAlloc( void )
     return state;
 }
 
+Theta_y *theta_y_alloc(Observation_model *model)
+{
+    Theta_y *theta_y = (Theta_y *) mxMalloc(sizeof(Theta_y));
+    theta_y->n_dimension_parameters = model->n_dimension_parameters;
+    theta_y->dimension_parameters = (int *) mxMalloc(model->n_dimension_parameters * sizeof(int));
+    for (int i=0; i<theta_y->n_dimension_parameters; i++)
+        theta_y->dimension_parameters[i] = 0;
+    theta_y->n_matrices = model->n_theta;
+    theta_y->matrix = (Matrix *) mxMalloc(model->n_theta * sizeof(Matrix));
+    return theta_y;
+}
+
 Theta *thetaAlloc( void )
 {
     Theta *theta = (Theta *) mxMalloc( sizeof(Theta) );
