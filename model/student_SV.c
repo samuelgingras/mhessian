@@ -1,9 +1,8 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
+#include "model.h"
 
 
 static int n_theta = 1;
@@ -16,6 +15,11 @@ static char *usage_string =
 "Description: Stochastic volatility model, without leverage, with Student's t distribution\n"
 "Extra parameters:\n"
 "\tnu\tStudent's t degree of freedom, positive real scalar\n";
+
+static int n_dimension_parameters = 0;
+static Theta_y_constraints theta_y_constraints[] = {
+    {"nu", -1, -1, all_positive}
+};
 
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)
@@ -42,19 +46,19 @@ void initializeParameter(const mxArray *prhs, Parameter *theta_y)
 }
 
 static
-void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int t,n = data->n;
-    double nu = theta_y->nu;
+    double nu = theta_y->matrix[0].p[0];
     for (t=0; t<n; t++)
         data->y[t] = rng_t(nu) * exp(x[t]/2);
 }
 
 static
-void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int t,n = data->n;
-    double nu = theta_y->nu;
+    double nu = theta_y->matrix[0].p[0];
     double coeff = 0.5 * (nu + 1);
     double result = 0.0;
     for (t=0; t<n; t++) {
@@ -89,14 +93,15 @@ void derivative( double y_t, double x_t, double nu, double *psi_t )
 static 
 void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative(data->y[t], x, theta->y->nu, psi_t);
+    double nu = theta->y->matrix[0].p[0];
+    derivative(data->y[t], x, nu, psi_t);
 }
 
 static 
 void compute_derivatives( Theta *theta, State *state, Data *data )
 {
     int t, n = state->n;
-    double nu = theta->y->nu;
+    double nu = theta->y->matrix[0].p[0];
     double *y = data->y; 
     double *x = state->alC; 
     double *psi_t;
@@ -119,8 +124,7 @@ void initializeModel()
     student_SV.n_partials_tp1 = n_partials_tp1;
     
     student_SV.usage_string = usage_string;
-    
-    student_SV.initializeParameter = initializeParameter;
+    student_SV.theta_y_constraints = theta_y_constraints;
     
     student_SV.draw_y__theta_x = draw_y__theta_x;
     student_SV.log_f_y__theta_x = log_f_y__theta_x;

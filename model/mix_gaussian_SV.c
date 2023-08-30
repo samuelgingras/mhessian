@@ -1,10 +1,8 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
-#include "faa_di_bruno.h"
+#include "model.h"
 
 
 static int n_theta = 3;
@@ -20,60 +18,23 @@ static char *usage_string =
 "\tmu_j\t Mean of the jth Gaussian distribution\n"
 "\tsigma_j\t Std of the jth Gaussian distribution\n";
 
-static
-void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // Set pointer to field
-    mxArray *pr_p = mxGetField( prhs, 0, "p" );
-    mxArray *pr_mu = mxGetField( prhs, 0, "mu" );
-    mxArray *pr_sigma = mxGetField( prhs, 0, "sigma" );
-    
-    // Check for missing parameters
-    if( pr_p == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'p' required.");
-
-    if( pr_mu == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'mu' required.");
-
-    if( pr_sigma == NULL )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'sigma' required.");
-
-    // Check parameters
-    if( !mxIsDouble(pr_p) || mxGetN(pr_p) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Column vector of double required.");
-
-    if( !mxIsDouble(pr_mu) || mxGetN(pr_mu) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Column vector of double required.");
-    
-    if( !mxIsDouble(pr_sigma) || mxGetN(pr_sigma) != 1)
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Column vector of double required.");
-
-    if( mxGetM(pr_p) != mxGetM(pr_mu) || mxGetM(pr_p) != mxGetM(pr_sigma) )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Incompatible vector length.");
-
-    // Set pointer to theta_y
-    theta_y->m = mxGetM(pr_p);
-    theta_y->p_tm = mxGetDoubles(pr_p);
-    theta_y->mu_tm = mxGetDoubles(pr_mu);
-    theta_y->sigma_tm = mxGetDoubles(pr_sigma);
-}
+static int n_dimension_parameters = 1;
+enum {i_p, i_mu, i_sigma, n_th};
+static Theta_y_constraints theta_y_constraints[] = {
+    {"p", 0, -1, column_stochastic},
+    {"mu", 0, -1, NULL},
+    {"sigma", 0, -1, all_positive}
+};
 
 static
-void draw_y__theta_x( double *x, Parameter *theta_y, Data *data )
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int t,j;
     int n = data->n;
-    int m = theta_y->m;
-    double *p = theta_y->p_tm;
-    double *mu = theta_y->mu_tm;
-    double *sigma = theta_y->sigma_tm;
+    int m = theta_y->dimension_parameters[0];
+    double *p = theta_y->matrix[i_p].p;
+    double *mu = theta_y->matrix[i_mu].p;
+    double *sigma = theta_y->matrix[i_sigma].p;
     double cumul[m];
     
     // Compute cumulative weight
@@ -91,19 +52,19 @@ void draw_y__theta_x( double *x, Parameter *theta_y, Data *data )
             k++;
         
         // Draw data
-        data->y[t] = exp(0.5*x[t]) * ( mu[k] + sigma[k]*rng_gaussian() );
+        data->y[t] = exp(0.5*x[t]) * (mu[k] + sigma[k]*rng_gaussian());
     }
 }
 
 static
-void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int t,j;
     int n = data->n;
-    int m = theta_y->m;
-    double *p = theta_y->p_tm;
-    double *mu = theta_y->mu_tm;
-    double *sigma = theta_y->sigma_tm;
+    int m = theta_y->dimension_parameters[0];
+    double *p = theta_y->matrix[i_p].p;
+    double *mu = theta_y->matrix[i_mu].p;
+    double *sigma = theta_y->matrix[i_sigma].p;
     
     *log_f = -0.5 * n * log(2*M_PI);
     
@@ -131,7 +92,7 @@ void derivative(double y_t, double x_t, int m, double *p, double *mu, double *si
     double f_t[6];
     double p_t[6] = { 0.0 };
     
-    for( j=0; j<m; j++ )
+    for (j=0; j<m; j++)
     {
         double y_t_j = y_t / sigma[j];
         double mu_sigma_j = mu[j] / sigma[j];
@@ -176,23 +137,23 @@ void derivative(double y_t, double x_t, int m, double *p, double *mu, double *si
 }
 
 static
-void compute_derivatives_t( Theta *theta, Data *data, int t, double x, double *psi_t )
+void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    int m = theta->y->m;
-    double *p = theta->y->p_tm;
-    double *mu = theta->y->mu_tm;
-    double *sigma = theta->y->sigma_tm;
+    int m = theta->y->dimension_parameters[0];
+    double *p = theta->y->matrix[i_p].p;
+    double *mu = theta->y->matrix[i_mu].p;
+    double *sigma = theta->y->matrix[i_sigma].p;
     
     derivative(data->y[t], x, m, p, mu, sigma, psi_t);
 }
 
 static
-void compute_derivatives( Theta *theta, State *state, Data *data )
+void compute_derivatives(Theta *theta, State *state, Data *data)
 {
-    int m = theta->y->m;
-    double *p = theta->y->p_tm;
-    double *mu = theta->y->mu_tm;
-    double *sigma = theta->y->sigma_tm;
+    int m = theta->y->dimension_parameters[0];
+    double *p = theta->y->matrix[i_p].p;
+    double *mu = theta->y->matrix[i_mu].p;
+    double *sigma = theta->y->matrix[i_sigma].p;
     double *x = state->alC; 
     
     double *psi_t;
@@ -211,12 +172,12 @@ static
 void initializeModel()
 {
     mix_gaussian_SV.n_theta = n_theta;
+    mix_gaussian_SV.n_dimension_parameters = n_dimension_parameters;
     mix_gaussian_SV.n_partials_t = n_partials_t;
     mix_gaussian_SV.n_partials_tp1 = n_partials_tp1;
     
-    mix_gaussian_SV.usage_string = usage_string;
-    
-    mix_gaussian_SV.initializeParameter = initializeParameter;
+    mix_gaussian_SV.usage_string = usage_string;    
+    mix_gaussian_SV.theta_y_constraints = theta_y_constraints;
     
     mix_gaussian_SV.draw_y__theta_x = draw_y__theta_x;
     mix_gaussian_SV.log_f_y__theta_x = log_f_y__theta_x;

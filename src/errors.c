@@ -3,6 +3,9 @@
 #include <string.h>
 #include "mex.h"
 
+char invalid_input[] = "mhessian:invalidInput";
+char missing_input[] = "mhessian:missingInput";
+
 void ErrMsgTxt(bool assertion, const char *text)
 {
     if(!assertion)

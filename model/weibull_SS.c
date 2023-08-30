@@ -1,7 +1,5 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
 
@@ -15,33 +13,13 @@ static char *usage_string =
 "Extra parameters: \n"
 "\t eta \t \n";
 
-static
-void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // Set pointer to field
-    mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
-    
-    // Check for missing parameter
-    if( pr_eta == NULL) 
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'eta' required.");
-
-    // Check parameter
-    if( !mxIsScalar(pr_eta) )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Scalar parameter required.");
-
-    if( mxGetScalar(pr_eta) < 0.0 )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameter: Positive parameter required.");
-
-    // Read model parameter
-    theta_y->eta = mxGetScalar(pr_eta);
-    theta_y->lambda = exp( lgamma(1 + 1/theta_y->eta) );
+static int n_dimension_parameters = 0;
+static Theta_y_constraints theta_y_constaints[] = {
+    {"eta", -1, -1, all_positive}
 }
 
 static
-void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int n = data->n;
     double scale = 1/theta_y->lambda;
@@ -90,7 +68,7 @@ void derivative(double y_t, double eta, double lambda, double x_t, double *psi_t
 static
 void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative( data->y[t], theta->y->eta, theta->y->lambda, x, psi_t );
+    derivative(data->y[t], theta->y->eta, theta->y->lambda, x, psi_t);
 }
 
 static
@@ -99,8 +77,7 @@ void compute_derivatives(Theta *theta, State *state, Data *data)
     int n = state->n;
     double *x = state->alC;
 
-    for(int t=0; t<n; t++)
-    {
+    for(int t=0; t<n; t++) {
         double *psi_t = state->psi + t * state->psi_stride;
         derivative( data->y[t], theta->y->eta, theta->y->lambda, x[t], psi_t );
     }

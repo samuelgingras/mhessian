@@ -54,6 +54,7 @@ typedef struct {
 } Matrix;
 
 typedef struct {
+    int is_data_augmentation;
     int n_dimension_parameters;
     int *dimension_parameters;
     int n_matrices;
@@ -88,7 +89,7 @@ typedef struct {
 } State_parameter;
 
 typedef struct {
-    Parameter *y;
+    Theta_y *y;
     State_parameter *x;
 } Theta;
 
@@ -168,8 +169,8 @@ typedef struct {
     Theta_y_constraints *theta_y_constraints;
     void (*initializeParameter)(const mxArray *mx_theta_y, Parameter *theta_y);
     
-    void (*draw_y__theta_x)(double *x, Parameter *theta_y, Data *data);
-    void (*log_f_y__theta_x)(double *x, Parameter *theta_y, Data *data, double *log_f);
+    void (*draw_y__theta_x)(double *x, Theta_y *theta_y, Data *data);
+    void (*log_f_y__theta_x)(double *x, Theta_y *theta_y, Data *data, double *log_f);
     
     void (*compute_derivatives_t)(Theta *theta, Data *data, int t, double x, double *psi_t);
     void (*compute_derivatives)(Theta *theta, State *state, Data *data);

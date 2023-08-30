@@ -1,7 +1,5 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
 #include "faa_di_bruno.h"
@@ -17,6 +15,14 @@ static char *usage_string =
 "\tp_j\t Component weight of the jth exponential distribution\n"
 "\tkappa_j\t Shape parameter of the jth component"
 "\tlambda_j\t Scale parameter of the jth component";
+
+static int n_dimension_parameters = 1;
+enum {i_p, i_lambda, n_th};
+static Theta_y_constraints theta_y_constraints[] = {
+    {"p", 0, -1, column_stochastic},
+    {"kappa", 0, -1, all_positive},
+    {"lambda", 0, -1, all_positive}
+};
 
 static
 void initializeParameter(const mxArray *prhs, Parameter *theta_y)

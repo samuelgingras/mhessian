@@ -1,9 +1,7 @@
 #include <math.h>
 #include <string.h>
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
-#include "errors.h"
 
 static int n_theta = 0;
 static int n_partials_t = 5;
@@ -15,13 +13,7 @@ static char *usage_string =
 "Extra parameters: none\n";
 
 static
-void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // No model parameter to initialize
-}
-
-static
-void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int t, n = data->n;
     for (t=0; t<n; t++)
@@ -29,7 +21,7 @@ void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 }
 
 static
-void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int t, n = data->n;
     double result = 0.0;
@@ -79,8 +71,7 @@ void initializeModel()
     gaussian_SV.n_partials_tp1 = n_partials_tp1;
     
     gaussian_SV.usage_string = usage_string;
-
-    gaussian_SV.initializeParameter = initializeParameter;
+    gaussian_SV.theta_y_constraints = NULL;
 
     gaussian_SV.draw_y__theta_x = draw_y__theta_x;
     gaussian_SV.log_f_y__theta_x = log_f_y__theta_x;

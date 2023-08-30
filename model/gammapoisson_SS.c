@@ -1,14 +1,12 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
+#include "model.h"
 
 static int n_theta = 1;
 static int n_partials_t = 5;
 static int n_partials_tp1 = 0;
-
 
 static char *usage_string =
 "Name: gammapoisson_SS \n"
@@ -16,44 +14,26 @@ static char *usage_string =
 "Extra parameters: \n"
 "\t r \t Gamma distribution shape parameter, positive real scalar\n";
 
-static void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // Set pointer to field
-    mxArray *pr_r = mxGetField( prhs, 0, "r" );
-
-    // Check for missing parameter
-    if( pr_r == NULL )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Structure input: Field 'r' required.");
-
-    // Check parameter
-    if( !mxIsScalar(pr_r) )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Model parameter: Scalar parameter required.");
-
-    if( mxGetScalar(pr_r) < 0.0 )
-        mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
-            "Model parameter: Positive parameter required.");
-
-    // Read model parameter
-    theta_y->r = mxGetScalar(pr_r);
-}
+static int n_dimension_parameters = 0;
+static Theta_y_constraints theta_y_constraints[] = {
+    {"r", -1, -1, all_positive}
+};
 
 static
-void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int n = data->n;
-    double r = theta_y->r;
+    double r = theta_y->matrix[0].p[0];
     
     for(int t=0; t<n; t++)
         data->y[t] = (double) rng_n_binomial( r / (r + exp(x[t])), r );
 }
 
 static
-void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
-    double r = theta_y->r;
+    double r = theta_y->matrix[0].p[0];
     
     *log_f = n * ( r * log(r) - lgamma(r) );
 
@@ -90,14 +70,14 @@ void derivative(double y_t, double r, double x_t, double *psi_t)
 static
 void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    derivative( data->y[t], theta->y->r, x, psi_t );
+    derivative( data->y[t], theta->y->matrix[0].p[0], x, psi_t );
 }
 
 static
 void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int t, n = state->n;
-    double r = theta->y->r;
+    double r = theta->y->matrix[0].p[0];
     double *k = data->y; 
     double *x = state->alC;	
     double *psi_t;
@@ -119,8 +99,7 @@ void initializeModel()
     gammapoisson_SS.n_partials_tp1 = n_partials_tp1;
     
     gammapoisson_SS.usage_string = usage_string;
-    
-    gammapoisson_SS.initializeParameter = initializeParameter;
+    gammapoisson_SS.theta_y_constraints = theta_y_constraints;
     
     gammapoisson_SS.draw_y__theta_x = draw_y__theta_x;
     gammapoisson_SS.log_f_y__theta_x = log_f_y__theta_x;

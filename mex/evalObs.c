@@ -41,7 +41,8 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mexErrMsgIdAndTxt( "mhessian:hessianMethod:invalidInputs",
                 "Structure input: Field 'y' required.");
 
-        model->initializeParameter( pr_theta_y, theta->y );
+        theta->y = theta_y_alloc(model);
+        initialize_theta_y(model, pr_theta_y, theta->y );
     }
 
     // Check state vector

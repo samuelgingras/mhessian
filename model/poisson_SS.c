@@ -1,7 +1,5 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
 
@@ -14,14 +12,8 @@ static char *usage_string =
 "Description: Dynamic Poisson count model\n"
 "Extra parameters: none\n";
 
-static
-void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // No model parameter to initialize
-}
-
 static 
-void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int t,n = data->n;
     for (t=0; t<n; t++)
@@ -29,7 +21,7 @@ void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
 }
 
 static 
-void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int t,n = data->n;
     double result = 0.0;
@@ -78,8 +70,7 @@ void initializeModel()
     poisson_SS.n_partials_tp1 = n_partials_tp1;
     
     poisson_SS.usage_string = usage_string;
-    
-    poisson_SS.initializeParameter = initializeParameter;
+    poisson_SS.theta_y_constraints = NULL;
     
     poisson_SS.draw_y__theta_x = draw_y__theta_x;
     poisson_SS.log_f_y__theta_x = log_f_y__theta_x;

@@ -179,7 +179,6 @@ Theta_y *theta_y_alloc(Observation_model *model)
 Theta *thetaAlloc( void )
 {
     Theta *theta = (Theta *) mxMalloc( sizeof(Theta) );
-    theta->y = (Parameter *) mxMalloc( sizeof(Parameter) );
     theta->x = (State_parameter *) mxMalloc( sizeof(State_parameter) );
     return theta;
 }

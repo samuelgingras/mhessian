@@ -1,9 +1,8 @@
 #include <math.h>
 #include <string.h>
-#include "errors.h"
-#include "mex.h"
 #include "RNG.h"
 #include "state.h"
+#include "model.h"
 
 static int n_theta = 3;
 static int n_partials_t = 5;
@@ -17,51 +16,21 @@ static char *usage_string =
 "\t kappa \t "
 "\t lambda \t \n";
 
+static int n_dimension_parameters = 0;
+enum {i_eta, i_kappa, i_lambda, n_th};
+static Theta_y_constraints theta_y_constraints[] = {
+    {"eta", -1, -1, all_positive},
+    {"kappa", -1, -1, all_positive},
+    {"lambda", -1, -1, all_positive}
+};
 
-static
-void initializeParameter(const mxArray *prhs, Parameter *theta_y)
-{
-    // Set pointer to field
-    mxArray *pr_eta = mxGetField( prhs, 0, "eta" );
-    mxArray *pr_kappa = mxGetField( prhs, 0, "kappa" );
-    mxArray *pr_lambda = mxGetField( prhs, 0, "lambda" );
-    
-    // Check for missing parameter
-    if( pr_eta == NULL) 
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'eta' required.");
-
-    if( pr_kappa == NULL) 
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'kappa' required.");
-
-    if( pr_lambda == NULL) 
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Structure input: Field 'lambda' required.");
-
-    // Check parameter
-    if( !mxIsScalar(pr_eta) || !mxIsScalar(pr_kappa) || !mxIsScalar(pr_lambda) )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameters: Scalar parameters required.");
-
-    if( mxGetScalar(pr_eta) < 0.0 || mxGetScalar(pr_kappa) < 0.0 || mxGetScalar(pr_lambda) < 0.0 )
-        mexErrMsgIdAndTxt( "mhessian:invalidInputs",
-            "Model parameters: Positive parameters required.");
-
-    // Read model parameter
-    theta_y->eta = mxGetScalar(pr_eta);
-    theta_y->kappa = mxGetScalar(pr_kappa);
-    theta_y->lambda = mxGetScalar(pr_lambda);
-    // theta_y->lambda = exp(lgamma(theta_y->kappa + 1/theta_y->eta) - lgamma(theta_y->kappa));
-}
-
-static void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
+static void draw_y__theta_x(double *x, Theta_y *theta_y, Data *data)
 {
     int n = data->n;
-    double eta = theta_y->eta;
-    double kappa = theta_y->kappa;
-    double scale = 1/theta_y->lambda;
-    double shape = 1/theta_y->eta;
+    double eta = theta_y->matrix[i_eta].p[0];
+    double kappa = theta_y->matrix[i_kappa].p[0];
+    double scale = 1/theta_y->matrix[i_lambda].p[0];
+    double shape = 1/eta;
     
     for(int t=0; t<n; t++)
     {
@@ -70,12 +39,12 @@ static void draw_y__theta_x(double *x, Parameter *theta_y, Data *data)
     }
 }
 
-static void log_f_y__theta_x(double *x, Parameter *theta_y, Data *data, double *log_f)
+static void log_f_y__theta_x(double *x, Theta_y *theta_y, Data *data, double *log_f)
 {
     int n = data->n;
-    double eta = theta_y->eta;
-    double kappa = theta_y->kappa;
-    double lambda = theta_y->lambda;
+    double eta = theta_y->matrix[i_eta].p[0];
+    double kappa = theta_y->matrix[i_kappa].p[0];
+    double lambda = theta_y->matrix[i_lambda].p[0];
     double eta_kappa = eta * kappa;
 
     *log_f = n * (log(eta) - lgamma(kappa) + eta_kappa * log(lambda));
@@ -108,9 +77,9 @@ void derivative(double y_t, double eta, double kappa, double lambda, double x_t,
 static 
 void compute_derivatives_t(Theta *theta, Data *data, int t, double x, double *psi_t)
 {
-    double eta = theta->y->eta;
-    double kappa = theta->y->kappa;
-    double lambda = theta->y->lambda;
+    double eta = theta->y->matrix[i_eta].p[0];
+    double kappa = theta->y->matrix[i_kappa].p[0];
+    double lambda = theta->y->matrix[i_lambda].p[0];
 
     derivative( data->y[t], eta, kappa, lambda, x, psi_t );
 }
@@ -119,9 +88,9 @@ static
 void compute_derivatives(Theta *theta, State *state, Data *data)
 {
     int n = state->n;
-    double eta = theta->y->eta;
-    double kappa = theta->y->kappa;
-    double lambda = theta->y->lambda;
+    double eta = theta->y->matrix[i_eta].p[0];
+    double kappa = theta->y->matrix[i_kappa].p[0];
+    double lambda = theta->y->matrix[i_lambda].p[0];
     double *x = state->alC;
 
     for(int t=0; t<n; t++)
@@ -144,8 +113,7 @@ void initializeModel()
     gengamma_SS.n_partials_tp1 = n_partials_tp1;
     
     gengamma_SS.usage_string = usage_string;
-    
-    gengamma_SS.initializeParameter = initializeParameter;
+    gengamma_SS.theta_y_constraints = theta_y_constraints;
     
     gengamma_SS.draw_y__theta_x = draw_y__theta_x;
     gengamma_SS.log_f_y__theta_x = log_f_y__theta_x;
