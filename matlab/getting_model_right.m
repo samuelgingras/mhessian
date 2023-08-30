@@ -1,15 +1,44 @@
 % getting_model_right Testing model specifications for correctness
 %   [marg, cond] = getting_model_right(model, theta, sim_params)
-%   computes ...
+%   computes outputs
+%   * marg, with fields (see below for explanation)
+%       mean, an n_obs x n_Q matrix
+%       nse, an n_obs x n_Q matrix of numerical standard errors,
+%       p, an n_obs x n_Q matrix of p-values
+%   * cond, with the same fields, but these are (n_obs - 1) x n_Q matrices.
 %   The inputs are
 %   * model is a string identifying one of the HESSIAN method models,
-%   * theta is a structure ...,
+%   * theta is a structure with fields
+%       - N, the number of observations
+%       - mu, the mean of the state vector
+%       - phi, the autocorrelation of the state vector
+%       - omega, the precision of the innovation of the state vector
 %   * sim_params is a structure with the fields
 %     - n_obs, the number of observations, and the length of vectors x and y,
 %     - n_blocks, the number of blocks used to compute numerical standard errors
 %     - block_size, the number of draws of (x, y) per block,
 %     - Q a vector of quantiles
-% Authors: Samuel Gingras, William McCausland
+%
+% The idea is to generate a sample from the joint distribution of x and y
+% (the values of state and model parameters are fixed) using the following Gibbs
+% draws:
+%  - x|y,theta using the HESSIAN method approximation as a proposal distribution
+%  - y|x,theta using direct simulation from the model
+%
+% If the model code (as well as the HESSIAN method code) is working, then 
+%  the distribution of each x[t] is N(mu, (omega(1-phi^2))^-1), t=1,...,n (marg below) 
+%  the distribution of each x[t] - (1-phi)mu - phi x[t-1] is N(0,omega^-1) (cond below)
+% The proportion of draws that are less than the correponding Gaussian quantiles are
+% computed for the quantiles Q = 0.1,0.2,...,0.9, for t=1,...,n in the marg case and
+% t=2,...,n in the cond case.
+% These sample proportions are compared with the population proportions, which are,
+% by definition, the values Q = 0.1,0.2,...,0.9 themselves.
+%
+% The marg and cond structures return information relevant to the comparison.
+% The fields mean give the sample proportions, for the values in Q and either
+% t=1,...,n (in the marg case) or t=2,...,n (in the cond case)
+% The fields p give p-values for a t-test of the hypothesis that the population
+% proportions are indeed 0.1,0.2,...,0.9.
 
 function [marg, cond] = getting_model_right(model, theta, sim_params)
 

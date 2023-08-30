@@ -1,11 +1,38 @@
+% This example tests the correctness of the code for various state space models.
+
+% The idea is to generate a sample from the joint distribution of x and y
+% (the values of state and model parameters are fixed) using the following Gibbs
+% draws:
+
+%  - x|y,theta using the HESSIAN method approximation as a proposal distribution
+%  - y|x,theta using direct simulation from the model
+
+% If the model code (as well as the HESSIAN method code) is working, then 
+%  the distribution of each $x_t$ is N(mu, (omega(1-phi^2))^-1), t=1,...,n (marg below) 
+%  the distribution of each $x_t - (1-phi)mu - phi x_{t-1}$ is N(0,omega^-1) (cond below)
+% The proportion of draws that are less than the correponding Gaussian quantiles are
+% computed for the quantiles Q = 0.1,0.2,...,0.9, for t=1,...,n in the marg case and
+% t=2,...,n in the cond case.
+% These sample proportions are compared with the population proportions, which are,
+% by definition, the values Q = 0.1,0.2,...,0.9 themselves.
+
+% The marg and cond structures return information relevant to the comparison.
+% The fields p give p-values for a t-test of the hypothesis that the population
+% proportions are indeed 0.1,0.2,...,0.9.
+% This script displays the minimal (out of 25 observations) of the p-values, for each
+% quantile.
+% It does so for each of the models.
+
 % Use these simulation parameters for all models
 clear sim_parameters
-sim_parameters.n_obs = 25;
-sim_parameters.n_blocks = 1e2;
+sim_parameters.n_obs = 25;         % Number of observations in artificial data
+sim_parameters.Q = 0.1:0.1:0.9;    % Vector of population proportions
+% Standard errors are computed using the batch mean method, with the following numbers
+% of blocks and their sizes. The simulation sample size is the product of these numbers.
+sim_parameters.n_blocks = 1e2;     
 sim_parameters.block_size = 1e3;
-sim_parameters.Q = 0.1:0.1:0.9;
 
-% Use these state evoluation parameters for all models
+% Use these state evolution parameters for all models
 clear x
 x.N = sim_parameters.n_obs;
 x.mu = -9;
