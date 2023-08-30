@@ -4,7 +4,7 @@ A Matlab toolbox implementing the HESSIAN method (Highly Efficient Simulation Sm
 
 #### Installation notes
 
-You will need Matlab and a way to compile Matlab mex files. See Matlab documentation for details, including the C compilers that are supported for your system.
+You will need Matlab and a way to compile Matlab mex files. See Matlab documentation for details, including a list of the C compilers that are supported for your system.
 
 1. Clone the Github repo https://github.com/samuelgingras/mhessian or download a zip file and unzip.
 
@@ -14,9 +14,11 @@ You will need Matlab and a way to compile Matlab mex files. See Matlab documenta
 
 #### Getting started
 
-1. There are five C-coded Matlab functions, ```drawObs```, ```drawState```, ```evalObs```, ```evalState``` and ```hessianMethod```. Use, for example, ```help hessianMethod``` for information on how to call them.
+1. There are five mex functions (i.e. C-coded Matlab functions). They are ```drawObs```, ```drawState```, ```evalObs```, ```evalState``` and ```hessianMethod```. Use, for example, ```help hessianMethod``` for information on how to call them.
 
 1. The ```examples``` folder has Matlab code illustrating how to use the toolbox.
+
+1. The document ```documentation/models.pdf``` describes the various state space models available.
 
 #### Directory structure
 
@@ -40,6 +42,6 @@ Each model is in a separate file.
 
 1. The ```test``` directory has Matlab code for testing code.
 
-#### Slides 
+#### ESBOE Slides 
 
-![Slides from ESOBE 2023](/McCausland_ESOBE23.pdf)
+[Slides from ESOBE 2023](/McCausland_ESOBE23.pdf)
