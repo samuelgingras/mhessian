@@ -16,8 +16,8 @@
 %       - 'poisson_SS', 'gammapoisson_SS'
 %       - 'exp_SS', 'gamma_SS', 'weibull_SS', 'gengamma_SS',
 %       - 'burr_SS', 'mix_exp_SS', 'mix_gamma_SS'
-%   * DATA is a sample from the given model
-%   * THETA is a vector with fields
+%   * DATA is a vector, a sample from the given model
+%   * THETA is a structure with fields
 %       - N, the number of observations
 %       - mu, the mean of the state vector
 %       - phi, the autocorrelation of the state vector
