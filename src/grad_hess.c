@@ -127,19 +127,9 @@ void compute_grad_Hess(
     double *grad, // Vector, approximation of E[g_{x|\theta}(\theta)]
     double *Hess, // Matrix, approximation of E[H_{x|\theta)(\theta)]
     double *var,  // Matrix, approximation of Var[g_{x|\theta}(\theta)]
-    // In following outputs d_t is defined as (x0_t - mu)
-    double *d1n_sum,     // (x0_1-mu) + (x0_n-mu)
-    double *dt_sum,      // (x0_2-mu) + ... + (x_{n-1}-mu)
-    double *d11nn_sum,   // (x0_1-mu)^2 + (x0_n-mu)^2
-    double *dtt_sum,     // (x0_2-mu)^2 + ... + (x0_{n-1}-mu)^2
-    double *dttp_sum,    // (x0_1-mu)(x0_2-mu) + ... + (x0_{n-1}-mu)(x0_n-mu)
-    // Output to implement cumulative gradient computations
-    double *g_cum,
-    // Output to implement third derivative stuff
-    double *cov_Q1Q2
-    )
+    double *xp, // Matrix, 2x1, dxC_1/dmu + dxC_n/dmu, dxC_2/dmu + ... + d xC_n-1/dmu
+    double *L_mu_mu_mu) // Matrix, 2x1, xp' * Psi''' * xp
 {
-    double T[27];                   // For third derivative information
     int t, iQ, iC;
     int n = state->n;               // Number of observations
     double *x0 = state->alC;        // Mode
@@ -178,7 +168,7 @@ void compute_grad_Hess(
     Q[1].Q_11 = 0.0;  Q[1].Q_tt = 2*phi*(1-phi*phi);            Q[1].Q_ttp = -2*(1-phi*phi);
     Q[2].Q_11 = 0.0;  Q[2].Q_tt = 2*(1-phi*phi)*(1-3*phi*phi);  Q[2].Q_ttp = 4*phi*(1-phi*phi);
 
-    // Set elements 1 and t of the vectors q and q_2
+    // Set elements 1 and t of the vectors q and q'
     Q[3].q_1 = 1-phi;         Q[3].q_t = (1-phi)*(1-phi);
     Q[4].q_1 = -(1-phi*phi);  Q[4].q_t = -2*(1-phi*phi)*(1-phi);
 
@@ -194,40 +184,12 @@ void compute_grad_Hess(
         {1, 2, {0.0}, {0.0}}   // 6, for Cov[e^\top Q'e, e^\top Q''e]
     };
 
-    // Forward pass to get g_cum
-    double x_bar = 0.0;
-    for (t=0; t<n; t++)
-        x_bar += x0[t];
-    x_bar /= n;
-    double Etp = (mu0[n-1] - x0[n-1]), Vtp = Sigma[n-1];
-    double deltp = Etp + x0[n-1] - x_bar;
-    g_cum[n-1] = (1-phi*phi) * Vtp;
-    g_cum[2*n-1] = phi * Vtp;
-    g_cum[3*n-1] = (1-phi*phi) * deltp * deltp;
-    g_cum[4*n-1] = phi * deltp * deltp;
-    g_cum[5*n-1] = Vtp;
-    for (t=n-2; t>=0; t--) {
-        double Et = (mu0[t] - x0[t]) + mud[t] * Etp;
-        double EVttp = Sigma[t] * (1 + sd[t]*Etp);
-        double Vt = EVttp + mud[t]*mud[t] * Vtp;
-        double mud_phi = mud[t] - phi;
-        g_cum[t] = EVttp + mud_phi*mud_phi * Vtp;
-        g_cum[t+n] = mud_phi * Vtp;
-        double delt = Et + x0[t] - x_bar;
-        g_cum[t+2*n] = pow(delt - phi*deltp, 2);
-        g_cum[t+3*n] = (delt - phi*deltp) * deltp;
-        g_cum[t+4*n] = Vt;
-        Etp = Et; Vtp = Vt; deltp = delt;
-    }
-
     // Variables for computing d statistics
     double d1 = x0[0] - mu[0], dn = x0[n-1] - mu[n-1];
     double dt = d1, dtm1 = 0.0, dtp1 = 0.0;
-    *dt_sum = 0.0;
-    *dtt_sum = 0.0;
-    *dttp_sum = 0.0;
-    *d1n_sum = d1 + dn;
-    *d11nn_sum = d1*d1 + dn*dn;
+    double dt_sum = 0.0;
+    double dtt_sum = 0.0;
+    double dttp_sum = 0.0;
 
     for (t=0; t<n; t++) {
 
@@ -243,9 +205,9 @@ void compute_grad_Hess(
         double dt_2 = 2.0 * dt;
         if (t<n-1) {
             dtp1 = x0[t+1] - mu[t+1];
-            *dt_sum += dt;
-            *dtt_sum += dt * dt;
-            *dttp_sum += dt * dtp1;
+            dt_sum += dt;
+            dtt_sum += dt * dt;
+            dttp_sum += dt * dtp1;
 
             // Set E1, b
             E1[0] = mu0[t] - x0[t];    b[0] = b0[t] - x0[t];
@@ -316,9 +278,6 @@ void compute_grad_Hess(
                 Qi->m_t[3] += Qi->Q_ttp * E1[2];
             }
         }
-        //g_cum[t] = Q[0].m_t[0];
-        //g_cum[t+n] = Q[1].m_t[0];
-        //g_cum[t+2*n] = Q[3].m_t[0];
 
         // Compute c_t^{(i,j)}(e_{t+1}) polynomials
         for (iC = 0; iC < nC; iC++) {
@@ -355,16 +314,16 @@ void compute_grad_Hess(
     } // for(t=0; t<n-1; t++)
 
     // To avoid double counting
-    *dt_sum -= d1;
-    *dtt_sum -= d1 * d1;
+    dt_sum -= d1;
+    dtt_sum -= d1 * d1;
     for (iQ = 0; iQ < 3; iQ++) {
         // Compute constant part of quadratic forms
         Q[iQ].dQd = Q[iQ].Q_11 * (d1*d1 + dn*dn);
-        Q[iQ].dQd += Q[iQ].Q_tt * *dtt_sum + Q[iQ].Q_ttp * *dttp_sum;
+        Q[iQ].dQd += Q[iQ].Q_tt * dtt_sum + Q[iQ].Q_ttp * dttp_sum;
     }
     // ... and linear forms.
     for (iQ=3; iQ<nQ; iQ++) {
-        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * *dt_sum;
+        Q[iQ].qd = Q[iQ].q_1 * (d1 + dn) + Q[iQ].q_t * dt_sum;
     }
 
     // Flat indices for a 3 x 3 matrix, 2 x 2 matrix
@@ -372,23 +331,16 @@ void compute_grad_Hess(
     // 3 4 5   2 3
     // 6 7 8
 
-    // Flat indices for a 3 x 3 x 3 array, 2 x 2 x 2 array
-    // 0 1 2   9 10 11  18 19 20    0 1  4 5
-    // 3 4 5  12 13 14  21 22 23    2 3  6 7
-    // 6 7 8  15 16 17  24 25 26
-
     // Assign elements of expected gradient
     grad[0] = 0.5*n - 0.5 * omega * (Q[0].dQd + Q[0].m_t[0]); 
     grad[1] = -phi - 0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
     if (long_th) {
         grad[2] = omega * (Q[3].qd + Q[3].m_t[0]);
     }
-    cov_Q1Q2[0] = 0.25 * omega * omega * C[6].c_t[0];
 
     // Assign elements of expected Hessian "Hess" and variance of gradient "var"
     Hess[0] = -0.5 * omega * (Q[0].dQd + Q[0].m_t[0]);
     var[0] = 0.25 * omega * omega * C[0].c_t[0];
-    T[0] = Hess[0] + 3*var[0];
     if (long_th) {
         Hess[1] = Hess[3] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
         Hess[4] = -(1-phi*phi) - 0.5 * omega * (Q[2].dQd + Q[2].m_t[0]);
@@ -401,13 +353,6 @@ void compute_grad_Hess(
         var[2] = var[6] = -0.5 * omega * omega * C[3].c_t[0];
         var[5] = var[7] = -0.5 * omega * omega * C[4].c_t[0];
         var[8] = omega * omega * C[5].c_t[0];
-
-        T[1] = T[3] = T[9] = Hess[1] + 3*var[1];
-        T[4] = T[10] = T[12] = Hess[4] + 2*var[4];
-        T[13] = -2*(3*phi*phi+1)*Hess[1] - 6*phi*Hess[4] + 0.25 * omega * omega * C[6].c_t[0];
-        T[14] = -2*(3*phi*phi+1)*Hess[1];
-        T[15] = -6*phi*Hess[4];
-        T[16] = 0.25 * omega * omega * C[6].c_t[0];
     }
     else {
         Hess[1] = Hess[2] = -0.5 * omega * (Q[1].dQd + Q[1].m_t[0]);
@@ -415,9 +360,77 @@ void compute_grad_Hess(
 
         var[1] = var[2] = 0.25 * omega * omega * C[1].c_t[0];
         var[3] = 0.25 * omega * omega * C[2].c_t[0];
-
-        T[1] = T[2] = T[4] = Hess[1] + 3*var[1];
-        T[3] = T[5] = T[6] = Hess[3] + 2*var[3];
-        T[7] = -2*(3*phi*phi+1) * Hess[1] - 6*phi*Hess[3] + 0.25 * omega * omega * C[6].c_t[0];
     }
+
+    double *m = state->m;
+    double *psi = state->psi;
+    double om_q1n = omega * (1 - phi);
+    double om_qt = omega * (1 - phi) * (1 - phi);
+
+    // Forward pass, forward substitution
+    m[0] = Sigma[0] * om_q1n;
+    for (t=1; t<n-1; t++)
+        m[t] = Sigma[t] * om_qt + ad[t-1] * m[t-1];
+    m[n-1] = Sigma[n-1] * om_q1n + ad[n-2] * m[n-2];
+
+    // Backward pass, backward substitution
+    xp[0] = m[n-1];
+    xp[1] = 0.0;
+    L_mu_mu_mu[0] = m[n-1] * m[n-1] * m[n-1] * psi[3 + (n-1)*state->psi_stride];
+    for (t=n-2; t>0; t--) {
+        m[t] += ad[t] * m[t+1];
+        xp[1] += m[t];
+        L_mu_mu_mu[0] += m[t] * m[t] * m[t] * psi[3 + t*state->psi_stride];
+    }
+    m[0] = ad[0] * m[1];
+    xp[0] += m[0];
+    L_mu_mu_mu[0] += m[0] * m[0] * m[0] * psi[3];
+
+    /*
+    if (long_th) {
+        double h = omega * (1-phi) * ((n-2)*(1-phi) + 2);
+        double hp = -omega * (1-phi*phi) * (2*(n-2)*(1-phi) + 2);
+        double hpp = 2*omega * (1-phi*phi) * ((n-2)*(1+3*phi)*(1-phi) + 2*phi);
+        
+        // Computations of L_opt_th, L_opt_th_th, based on November 1-3 notes, 2023
+        //    Quantities obtained without further approximation
+        double omq_Ee = grad[3];
+        double omqp_Ee = Hess[5];
+        double omq_Ee1 = Var[2];
+        double omq_Ee2 = Var[5];
+        double omq_Eemu = Hess[8] + Var[8];
+        double V33 = Var[8];
+        double omqpp_Ee = -2*((1+phi)^2 * omq_Ee + (1+2*phi) * omqp_Ee); % u_3 in notes
+        //    Quantities requiring further approximations
+        double omqp_Ee1 = -2*(1+phi) * omq_Ee1;              % u_2 in notes
+        double omqp_Ee2 = -2*(1+phi) * omq_Ee2;              % u_5 in notes
+        double V33_outer = omega * (1-phi) * xp[0];
+        double V33_inner = V33 - V33_outer;
+        double omqp_Eemu = -2*(1+phi) * V33_inner
+                  - (1+phi) * V33_outer - hp;                % u_1 in notes
+        double omqpp_Eemu = 2*(1+phi)*(1+3*phi) * V33_inner
+                   + 2*(1+phi)*phi * V33_outer - hpp;        % u_4 in notes
+
+        double L_mu = grad[3];
+        double L_mu_mu = Hess[8] + Var[8];
+        //double L_mu_mu_mu = q_theta.L_mu_mu_mu;
+        double L_mu_th[2] = {Hess[2] + Var[2], Hess[5] + Var[5]};
+        double L_mu_mu_th[2] = {omq_Eemu, omqp_Eemu};
+        double L_mu_th_th[4] = {
+            omq_Ee + 2*omq_Ee1, omqp_Ee + omqp_Ee1 + omq_Ee2,
+            omqp_Ee + omqp_Ee1 + omq_Ee2, omqpp_Ee + 2*omqp_Ee2
+        };
+        double L_mu_mu_th_th[4] = {omq_Eemu, omqp_Eemu, omqp_Eemu, omqpp_Eemu};
+        double mu_diff = -L_mu / (L_mu_mu - 0.5 * L_mu_mu_mu * L_mu / L_mu_mu);
+        double like2_v = sh.like.v + L_mu * mu_diff ...
+            + L_mu_mu * mu_diff^2 / 2 + L_mu_mu_mu * mu_diff^2 / 6;
+        for (i=0; i<2; i++) {
+            like2_g[i] = grad[i] + L_mu_th[i] * mu_diff + 0.5 * L_mu_mu_th[i] * mu_diff * mu_diff;
+            for (j=0; j<2; j++)
+                like2_H[i+2*j] = Hess[i+3*j] + Var[i+3*j]
+                + L_mu_th_th[i+2*j] * mu_diff
+                + 0.5 * L_mu_mu_th_th[i+2*j] * mu_diff * mu_diff;
+        }
+    }
+    */
 }

@@ -47,7 +47,7 @@ static char iter_string[1000];
 #define verify(condition, warn_string, iter_fmt_string, ...) \
 if (!(condition)) { \
 sprintf(iter_string, iter_fmt_string, __VA_ARGS__); \
-mexWarnMsgIdAndTxt("HESSIAN:generalError", MatlabWarningFormat, __LINE__, __FILE__, __func__, iter_string, warn_string); \
+mexErrMsgIdAndTxt("HESSIAN:generalError", MatlabWarningFormat, __LINE__, __FILE__, __func__, iter_string, warn_string); \
 }
 
 // fatal_error_detected = TRUE; \

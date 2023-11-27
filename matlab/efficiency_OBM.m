@@ -1,7 +1,7 @@
 % File: efficiency_OBM.m
 % 
 % Efficiency computations using overlapping batch mean method
-function [rne, nse, hmean, stdev] = efficiency_OBM(h)
+function eff = efficiency_OBM(h)
     hmean = mean(h);
     hvar = var(h);
     N = length(h);
@@ -14,7 +14,8 @@ function [rne, nse, hmean, stdev] = efficiency_OBM(h)
         nse2 = nse2 + (h_j - hmean)^2;
     end
     nse2 = nse2 * const;
-    nse = sqrt(nse2);
-    stdev = sqrt(hvar);
-    rne = (hvar/N) / nse2;
+    eff.mean = hmean;           % Sample mean
+    eff.std = sqrt(hvar);       % Sample standard deviation
+    eff.nse = sqrt(nse2);       % Numerical standard error (simulation noise)
+    eff.rne = (hvar/N) / nse2;  % Relative numerical efficiency
 end

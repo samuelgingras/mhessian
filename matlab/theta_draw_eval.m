@@ -1,150 +1,137 @@
 function [lnq_thSt, varargout] = ...
-	theta_draw_eval(prior, theta, q_theta, varargin)
+	theta_draw_eval(model, prior, y, mode_sh, theta, hmout, varargin)
 
-	% See if 
-	if( isfield(theta,'x') )
-		is_simple = false;
-		old_theta = theta;
-		theta = theta.x;
+	% Simulation parameters
+	global hmctrl;
+	if exist('hmctrl', 'var')
+		th2_rho = hmctrl.th2_rho;
+		th2_mag = hmctrl.th2_mag;
+		mu_mag = hmctrl.mu_mag;
+		nu = hmctrl.nu;
 	else
-		is_simple = true;
+		th2_rho = [0.1; 0.1];
+		th2_mag = [1.2; 1.2];
+		mu_mag = 1.05;
+		nu = 10;
 	end
 
-	% See if thetaSt (theta star) needs to be drawn (is_draw) or not.
-    if nargin == 4 && nargout == 1
+	% See if proposal thetaSt is to be drawn (is_draw) or not.
+	if nargin == 7 && nargout == 1
 		is_draw = false;
 		thetaSt = varargin{1};
-		if( ~is_simple )
-			thetaSt = thetaSt.x;
-		end
-		thSt = thetaSt.th;
-	elseif nargin == 3 && nargout == 2
+	elseif nargin == 6 && nargout == 2
 		is_draw = true;
 	else
 		error("Incorrect combination of number of inputs and outputs");
-    end
-    long_th = prior.hyper.has_mu;
-
-
-	[v_prior, g_prior, H_prior] = log_prior_eval(prior, theta);
-	th = theta.th;
-
-	% Construct gradient g and Hessian H
-	g_y = q_theta.grad;
-	g = q_theta.grad + g_prior;
-	H_y = q_theta.Hess + q_theta.Var;
-	H = H_y + H_prior;
-
-	% Compute (WJM: new H12_post correction)
-	if long_th
-		phi = tanh(th(2));
-		gth_grad = [1; -2*(1+phi)];
-		gth_Hess = [1, -2*(1+phi); -2*(1+phi), 2*(1+phi)*(1+3*phi)];
-		gth_opg = gth_grad * gth_grad';
-		h_bar = -H_prior(3, 3);
-		h_bar2_diff2 = h_bar^2 * (g_prior(3)/h_bar + g(3)/H_y(3, 3));
-		lambda_g = -H_y(3, 3);
-		coeff_opg = 0.5 * lambda_g^2 / (h_bar + lambda_g)^2;
-		coeff_opg = coeff_opg + h_bar2_diff2 * lambda_g^2 / (h_bar + lambda_g)^3;
-		term_opg = coeff_opg * gth_opg;
-		coeff_Hess = -0.5 * lambda_g / (h_bar + lambda_g);
-		coeff_Hess = coeff_Hess - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
-		term_Hess = coeff_Hess * gth_Hess;
-		coeff_grad = -0.5 * lambda_g / (h_bar + lambda_g);
-		coeff_grad = coeff_grad - 0.5 * h_bar2_diff2 * lambda_g / (h_bar + lambda_g)^2;
-		term_grad = coeff_grad * gth_grad;
-
-		g12_prior = g_prior(1:2);
-		g12_post = q_theta.grad(1:2);
-		g12 = g12_prior + g12_post;
-		H12_prior = H_prior(1:2, 1:2);
-		H12_post = H_y(1:2, 1:2);
-	end
-	g12 = g_prior(1:2) + q_theta.grad(1:2);
-	
-	if long_th
-		%H12_post = H12_post - 0.5*(1+g(3)^2/H_y(3,3)) * gth_Hess;
-		%g12_post = g12_post - 0.5*(1+g(3)^2/H_y(3,3)) * gth_grad;
-
-		H12_post = H12_post - 0.5*g_y(3)^2/H_y(3,3) * gth_Hess;
-		H12_post = H12_post + term_opg + term_Hess;
-		g12_post = g12_post - 0.5*g_y(3)^2/H_y(3,3) * gth_grad;
-		g12_post = g12_post + term_grad; 
 	end
 
-	res = mode_guess(q_theta, theta, prior);
+	% See if there is a mu in theta or not
+	has_mu = prior.has_mu;
+	n = theta.N;
 
-	theta.th(1:2) = res.mode;
-	theta.omega = exp(res.mode(1));
-	theta.phi = tanh(res.mode(2));
-	[v_prior, g_prior, H_prior] = log_prior_eval(prior, theta);
-	g12_prior = g_prior(1:2);
-	Om12_prior = -H_prior(1:2, 1:2);
-	Om12_post = -res.H_mode;
-	g12_post = [0; 0];
+	if ~isfield(hmout, 'sh')
+		hmout.sh = compute_proposal_params(model, prior, y, mode_sh, theta, hmout);
+	end
+	H = hmout.sh.params.H2;
+	g = hmout.sh.params.g2;
+	th2_unc_mean = hmout.sh.params.mean2;
 
-	R = chol(Om12_prior + Om12_post);
+	% Compute eigenvalues for epsilon precision
+	[V, D] = eig(H);
+	D_prec_eps = -diag(1./(th2_mag .* (1-th2_rho.^2))) * D;  % Innovation precision eigenvalues
+	D_prec_eps_root = sqrt(D_prec_eps);                 % Square roots of these
 
-	% Construct guess of variance, streched by lambda, of (theta_1, theta_2).
-	% Compute lower Chol factor
-	I = eye(2);
-	Lambda = [1.2, 0; 0, 1.2];
-	Sigma_th = Lambda * (R\(R'\I)) * Lambda';
-	L = chol(Sigma_th, 'lower');
+	% Unconditional mean and conditional mean for AR draw
+	th2_con_mean = th2_rho .* theta.th(1:2) + (1 - th2_rho) .* th2_unc_mean;
 
-	% Specify first order PAC Psi, construct Phi and Sigma for step
-	Psi = 0.2 * I;
-	Phi = L * Psi / L;
-	Sigma_eps = (Sigma_th - L * Psi * Psi' * L');
-	R_eps = chol(Sigma_eps);
-
-	% Draw leading 2x1 subvector of thetaSt or evaluate uSt from thetaSt
-	thSt12_mean = th(1:2) + (I-Phi) * R\(R'\g12);
+	% Bivariate normal code
+	% {
+	H = hmout.sh.params.H2_3rd;
+	[V, D] = eig(H);
+	D_prec_eps = -diag(1./(th2_mag .* (1-th2_rho.^2))) * D;  % Innovation precision eigenvalues	
+	D_prec_eps_root = sqrt(D_prec_eps);
+	if min(abs(D_prec_eps_root(1,1)), abs(D_prec_eps_root(2,2))) < 0.01
+		display(D_prec_eps)
+		display(hmout.sh.params.H2)
+		display(D)
+		display(H)
+	end
 	if is_draw
-		% Draw thSt (theta*)
-		uSt = randn(2, 1);
-		thSt = thSt12_mean + R_eps' * uSt;
+		uSt = trnd([nu;nu]); %randn(2, 1);
+		delta_th2 = V*inv(D_prec_eps_root)*V' * uSt;
+		[L_plus_res, L] = directional_3rd(n, H, th2_con_mean, delta_th2);
+		L_plus_res = sign(L_plus_res) * min(abs(L_plus_res), 3);
+		if (rand < exp(L_plus_res) / (exp(L_plus_res) + exp(-L_plus_res)))
+			thSt2 = th2_con_mean + delta_th2;
+			lnq_thSt = L_plus_res - log(cosh(L_plus_res));
+		else
+			thSt2 = th2_con_mean - delta_th2;
+			lnq_thSt = -L_plus_res - log(cosh(L_plus_res));
+		end
 	else
-		% Compute uSt
-		uSt = R_eps'\(thSt(1:2) - thSt12_mean);
+		thSt = thetaSt.th;
+		thSt2 = thSt(1:2);
+		delta_th2 = thSt2 - th2_con_mean;
+		uSt = V*D_prec_eps_root*V' * delta_th2;
+		[L_plus_res, L] = directional_3rd(n, H, th2_con_mean, delta_th2);
+		L_plus_res = sign(L_plus_res) * min(abs(L_plus_res), 3);
+		lnq_thSt = L_plus_res - log(cosh(L_plus_res));
 	end
+	%lnq_thSt = lnq_thSt + 0.5 * (log(det(D_prec_eps)) - uSt'*uSt);
+	lnq_thSt = lnq_thSt + 0.5 * (log(det(D_prec_eps)) ...
+		- (nu-1) * log( (nu+uSt(1)^2) * (nu+uSt(2)^2) ));
+	% }
 
-	% Implement reflection sampling
-	thSt2_cond_mean = thSt12_mean(2) + ...
-		(Sigma_eps(1, 2) / Sigma_eps(1, 1)) * (thSt(1) - thSt12_mean(1));
-	x = (thSt(2) - thSt2_cond_mean);
-	H_222 = -6*phi*q_theta.Hess(2, 2);
-	H_222 = -2*(3*phi^2+1) * q_theta.Hess(1, 2) - 6*phi*q_theta.Hess(2, 2);
-	H_222 = H_222 + q_theta.cov_Q1Q2;
-	odd = H_222 * x^3 / 6;
-	odd = sign(odd) * min(abs(odd), 0.75);
-	if is_draw & (rand < -odd)
-		thSt(2) = 2*thSt2_cond_mean - thSt(2);
-		odd = -odd;
+	% Double gamma code
+	%{
+	is_chol = false;
+	if is_draw
+		[lnq_thSt, thSt2] = double_gamma(-V*D_prec_eps*V', is_chol);
+		thSt2 = thSt2 + th2_con_mean;
+	else
+		thSt = thetaSt.th;
+		thSt2 = thSt(1:2);
+		lnq_thSt = double_gamma(-V*D_prec_eps*V', is_chol, thSt2 - th2_con_mean);
 	end
-
-	% Compute log density (up to normalization constant) at thSt.
-	lnq_thSt = -log(det(R_eps)) - 0.5*(uSt'*uSt);
-	lnq_thSt = lnq_thSt + log(1 + odd);
+	%}
 
 	% Conditional draw/eval of th3St given thSt
-	if long_th
-		phi = tanh(th(2)); omega = exp(th(1));
-		phiSt = tanh(thSt(2)); omegaSt = exp(thSt(1));
-		c = omegaSt*(1-phiSt)^2/(omega*(1-phi)^2);
-		phi_mid = tanh((th(2)+thSt(2))/2); omega_mid = exp((th(1)+thSt(1))/2);
-		c_mid = omega_mid*(1-phi_mid)^2/(omega*(1-phi)^2);
+	if has_mu
+		% Conditional precision mu|y,omega,phi
+		phiSt = tanh(thSt2(2));
+		omegaSt = exp(thSt2(1));
+		n = length(y);
+		om_q_iotaSt = omegaSt * (2*(1-phiSt) + (n-2)*(1-phiSt)^2);
 
-		v = H(1:2, 3) * c_mid;
-		h = H(3,3) * c_mid;
-		g3 = g(3) + (thSt(1:2) - th(1:2))' * v;
-		thSt3_mean = th(3) - g3 / h;
-		thSt3_sd = 1.0/sqrt(-H(3,3) * c);
+		% Conditional precision of mu at new values of omega, phi
+		muSt_ml_prec = om_q_iotaSt - hmout.sh.V33;
+		delta = thSt2 - hmout.sh.th2;
+		muSt_ml_prec = muSt_ml_prec - delta' * hmout.sh.V33_th;
+		muSt_ml_prec = muSt_ml_prec - 0.5 * delta' * hmout.sh.V33_th_th * delta;
+		muSt_ml_prec = max(muSt_ml_prec, 0.1 * om_q_iotaSt);
+
+		% Values of mu maximizing likelihood for (omega, phi) and
+		% proposal (omegaSt, phiSt)
+		mu = theta.th(3);
+		v = hmout.q_theta.Var(3,1:2);
+		mu_mle = mu - hmout.sh.params.like_g3 / hmout.sh.params.like_H33;
+		muSt_mle = mu_mle - v * (thSt2 - theta.th(1:2)) / hmout.sh.params.like_H33;
+
+		% Compute prior mean and precision at (omega, phi)
+		% Could recompute but they are usually constant and usually 
+		% not very important.
+		mu_prior_prec = -hmout.sh.params.prior_H33;
+		mu_prior_mode = mu + hmout.sh.params.prior_g3 / mu_prior_prec;
+
+		% posterior values
+		mu_post_prec = muSt_ml_prec + mu_prior_prec;
+		thSt3_mean = (muSt_ml_prec*muSt_mle + mu_prior_prec*mu_prior_mode)/mu_post_prec;
+		thSt3_sd = sqrt(mu_mag/mu_post_prec);
 
 		if is_draw
 			uSt3 = randn(1);
 			thSt3 = thSt3_mean + uSt3 * thSt3_sd;
-			thSt = [thSt; thSt3];
+			thSt = [thSt2; thSt3];
 		else
 			uSt3 = (thSt(3) - thSt3_mean)/thSt3_sd;
 		end
@@ -152,24 +139,7 @@ function [lnq_thSt, varargout] = ...
 	end
 
 	if is_draw
-		thetaSt = theta;
-		thetaSt.th = thSt;
-		thetaSt.omega = exp(thSt(1));
-		thetaSt.phi = tanh(thSt(2));
-		if long_th
-			thetaSt.mu = thSt(3);
-		end
-
-		if( ~is_simple )
-			tmp.x = thetaSt;
-			fields = fieldnames(old_theta);
-			for f=1:length(fields)
-				if( ~strcmp(fields{f},'x') )
-					tmp.(fields{f}) = old_theta.(fields{f});
-				end
-			end
-			thetaSt = tmp;
-		end
+		thetaSt = fill_theta_from_th(theta, thSt, has_mu);
 		varargout{1} = thetaSt;
 	end
 end

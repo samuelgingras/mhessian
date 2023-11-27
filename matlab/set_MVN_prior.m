@@ -14,6 +14,7 @@ function prior = set_MVN_prior(has_mu, theta_mean, theta_variance)
     prior.H = -inv(theta_variance);
     prior.R = chol(-prior.H);
     prior.log_eval = @MVN_log_eval;
+    prior.mean = @MVN_mean;
 end
 
 function [lnp_th, lnp_th_g, lnp_th_H] = MVN_log_eval(prior, theta)
@@ -22,4 +23,14 @@ function [lnp_th, lnp_th_g, lnp_th_H] = MVN_log_eval(prior, theta)
 	lnp_th = -0.5*(u'*u);
 	lnp_th_g = -(prior.R'*u);
 	lnp_th_H = prior.H;
+end
+
+function theta = MVN_mean(prior)
+
+    theta.th = prior.theta_mean;
+    theta.omega = exp(theta.th(1));
+    theta.phi = tanh(theta.th(2));
+    if prior.has_mu
+        theta.mu = theta.th(3);
+    end
 end

@@ -21,14 +21,14 @@ function prior = set_LNBeN_prior(has_mu, LN_mu, LN_h, Be_al, Be_be, N_mu, N_h)
         prior.N_h = N_h;
     end
     prior.log_eval = @LNBeN_log_eval;
+    prior.mean = @LNBeN_mean;
 end
 
 function [lnp_th, lnp_th_g, lnp_th_H] = LNBeN_log_eval(prior, th)
-
 	u = th(1) + 2*prior.LN_mu;
-    H11 = -4 * prior.LN_h
-    v1 = H11 * u^2;
-    g1 = H11 * u;   
+	H11 = -0.25 * prior.LN_h;
+	v1 = 0.5 * H11 * u^2;
+	g1 = H11 * u;
 	[v2, g2, H22] = Be_phi(tanh(th(2)), prior.Be_al, prior.Be_be);
 	if prior.has_mu
 		u = th(3) - prior.N_mu;
@@ -55,3 +55,16 @@ function [lnf, dlnf_dth, d2lnf_dth2] = Be_phi(phi, alpha, beta)
 	dlnf_dth = dlnf_dphi .* (1-phi.^2) - 2*phi;
 	d2lnf_dth2 = d2lnf_dphi2 .* (1-phi.^2).^2 - dlnf_dphi .* (2*phi).*(1-phi.^2) - 2*(1-phi.^2);
 end
+
+function theta = LNBeN_mean(prior)
+
+	theta.phi = (prior.Be_al - prior.Be_be) / (prior.Be_al + prior.Be_be);
+    theta.omega = exp(-2*prior.LN_mu + 2/prior.LN_h);
+	if prior.has_mu
+		theta.mu = prior.N_mu;
+	    theta.th = [log(theta.omega); atanh(theta.phi); theta.mu];
+	else
+		theta.th = [log(theta.omega); atanh(theta.phi)];
+	end
+end
+

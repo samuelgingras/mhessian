@@ -21,6 +21,7 @@ function prior = set_GaBeN_prior(has_mu, Ga_al, Ga_be, Be_al, Be_be, N_mu, N_h)
         prior.N_h = N_h;
     end
     prior.log_eval = @GaBeN_log_eval;
+    prior.mean = @GaBeN_mean;
 end
 
 function [lnp_th, lnp_th_g, lnp_th_H] = GaBeN_log_eval(prior, th)
@@ -59,4 +60,16 @@ function [lnf, dlnf_dth, d2lnf_dth2] = Be_phi(phi, alpha, beta)
 	lnf = alpha * log(1+phi) + beta * log(1-phi);
 	dlnf_dth = (alpha - beta) - phi * (alpha + beta);
 	d2lnf_dth2 = -(alpha + beta) * (1-phi^2);
+end
+
+function theta = GaBeN_mean(prior)
+
+	theta.phi = (prior.Be_al - prior.Be_be) / (prior.Be_al + prior.Be_be);
+    theta.omega = prior.Ga_be / prior.Ga_al;
+	if prior.has_mu
+		theta.mu = prior.N_mu;
+	    theta.th = [log(theta.omega); atanh(theta.phi); theta.mu];
+	else
+		theta.th = [log(theta.omega); atanh(theta.phi)];
+	end
 end

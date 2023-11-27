@@ -31,7 +31,8 @@ theta.phi = phi0;
 theta.omega = omega0;
 
 % Simulate artificial sample
-y = simulate_sample(model, theta);
+x = drawState(theta)
+y = drawObs(x, model, theta);
 
 % Set prior distribution (mean and variance are arguments)
 %prior = set_MVN_prior(true, [3.6; 2.5; -10.5], ...

@@ -237,7 +237,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
         
         // (5) Evaluate observations conditional log-likelihood given the states
         model->log_f_y__theta_x( state->x, theta->y, data, mxGetPr(lnp_y) );
-        
 
         // Create MATLAB output structure
         if( doGradHess ) {
@@ -248,44 +247,31 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxArray *grad = mxCreateDoubleMatrix(dim_th, 1, mxREAL);
             mxArray *Hess = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
             mxArray *Var = mxCreateDoubleMatrix(dim_th, dim_th, mxREAL);
-            mxArray *d1n_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            mxArray *dt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            mxArray *d11nn_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            mxArray *dtt_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            mxArray *dttp_sum = mxCreateDoubleMatrix(1, 1, mxREAL);
-            mxArray *g_cum = mxCreateDoubleMatrix(state->n, 5, mxREAL);
+            mxArray *xp = mxCreateDoubleMatrix(2, 1, mxREAL);
+            mxArray *L_mu_mu_mu = mxCreateDoubleMatrix(1, 1, mxREAL);
 
             // Restore next line if implementing 3rd derivative information
-            mxArray *cov_Q1Q2 = mxCreateDoubleMatrix(1, 1, mxREAL);
             // mxArray *T = mxCreateNumericArray(3, dims, mxDOUBLE_CLASS, mxREAL);
 
             // Compute gradHess approximation
-            compute_grad_Hess( long_th, state, theta,
+            compute_grad_Hess(long_th, state, theta,
                 mxGetPr(grad), mxGetPr(Hess), mxGetPr(Var),
-                mxGetPr(d1n_sum), mxGetPr(dt_sum), mxGetPr(d11nn_sum), mxGetPr(dtt_sum), mxGetPr(dttp_sum),
-                mxGetPr(g_cum), mxGetPr(cov_Q1Q2) );
+                mxGetPr(xp), mxGetPr(L_mu_mu_mu));
 
             // Set field names
             const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y", "q_theta"};
-            const char *field_gradHess[] = {"grad", "Hess", "Var",
-                                            "d1n_sum", "dt_sum", "d11nn_sum", "dtt_sum", "dttp_sum", "g_cum", "cov_Q1Q2"};
+            const char *field_gradHess[] = {"grad", "Hess", "Var", "xp", "L_mu_mu_mu"};
             
             // Create gradHess output structure
-            mxArray *q_theta = mxCreateStructMatrix(1, 1, 10, field_gradHess);
+            mxArray *q_theta = mxCreateStructMatrix(1, 1, 5, field_gradHess);
             mxSetField(q_theta, 0, "grad", grad);
             mxSetField(q_theta, 0, "Hess", Hess);
             mxSetField(q_theta, 0, "Var", Var);
-            mxSetField(q_theta, 0, "d1n_sum", d1n_sum);
-            mxSetField(q_theta, 0, "dt_sum", dt_sum);
-            mxSetField(q_theta, 0, "d11nn_sum", d11nn_sum);
-            mxSetField(q_theta, 0, "dtt_sum", dtt_sum);
-            mxSetField(q_theta, 0, "dttp_sum", dttp_sum);
-            mxSetField(q_theta, 0, "g_cum", g_cum);
-            mxSetField(q_theta, 0, "cov_Q1Q2", cov_Q1Q2);
+            mxSetField(q_theta, 0, "xp", xp);
+            mxSetField(q_theta, 0, "L_mu_mu_mu", L_mu_mu_mu);
 
             // Restore next line if implementing 3rd derivative information
             // mxSetField(q_theta, 0, "T", T);
-
 
             // Create MATLAB output structure
             plhs[0] = mxCreateStructMatrix(1, 1, 6, field_hmout);
@@ -295,10 +281,8 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(plhs[0], 0, "lnp_x", lnp_x);
             mxSetField(plhs[0], 0, "lnq_x__y", lnq_x);
             mxSetField(plhs[0], 0, "q_theta", q_theta);
-
         }
         else {
-
             // Set field names
             const char *field_hmout[] = {"x", "xC", "lnp_y__x", "lnp_x", "lnq_x__y"};
             
@@ -309,7 +293,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
             mxSetField(plhs[0], 0, "lnp_y__x", lnp_y);
             mxSetField(plhs[0], 0, "lnp_x", lnp_x);
             mxSetField(plhs[0], 0, "lnq_x__y", lnq_x);
-
         }
     }
 }
