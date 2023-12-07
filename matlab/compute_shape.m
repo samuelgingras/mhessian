@@ -96,6 +96,10 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.int3.g = L_mu_th;
 		sh.int3.H = L_mu_th_th;
 
+		sh.prior2.v = sh.prior.v;
+		sh.prior2.g = sh.prior.g(1:2);
+		sh.prior2.H = sh.prior.H(1:2, 1:2);
+
 		sh.post2.v = sh.like2.v + sh.prior.v + I;
 		sh.post2.g = sh.like2.g + sh.prior.g(1:2) + I_th;
 		sh.post2.H = sh.like2.H + sh.prior.H(1:2, 1:2) + I_th_th;
@@ -109,9 +113,10 @@ function sh = compute_shape(prior, hmout, theta)
 	end
 
 	% New stuff related to third derivatives
-	sh.L12_norm = sh.like2.H(1,2) / hp;
-	sh.L11_const = sh.like2.H(1,1) - sh.L12_norm * h;
-	sh.L22_norm = sh.like2.H(2,2) / hpp;
-	sh.L22_const = sh.like2.H(2,2) - sh.L12_norm * hpp;
+	sh.L12_norm = (sh.like2.H(1,2) + sh.I.H(1,2)) / hp;
+	sh.L11_const = (sh.like2.H(1,1) + sh.I.H(1,1)) - sh.L12_norm * h;
+	sh.L22_norm = (sh.like2.H(2,2) + sh.I.H(2,2)) / hpp;
+	sh.L22_const = (sh.like2.H(2,2) + sh.I.H(2,2)) - sh.L12_norm * hpp;
 
+	sh.omqiota = h;
 end

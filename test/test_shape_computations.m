@@ -23,10 +23,10 @@ theta = fill_theta_from_om_ph_mu(theta_true, true);
 % Set prior distribution (mean and variance are arguments)
 %prior = set_MVN_prior(true, [3.6; 2.5; -10.5], ...
 %                      [1.25, 0.5, 0.0; 0.5, 0.25, 0.0; 0.0, 0.0, 0.25]);
-%prior = set_GaBeN_prior(true, 1, 50, 19, 1, -9, 1);
-prior = set_LNBeN_prior(true, -1.8, 1, 19, 1, -10, 4);
+prior = set_GaBeN_prior(true, 0.5, 0.5, 20, 1.5, -10, 0.01);
+%prior = set_LNBeN_prior(true, -1.8, 1, 19, 1, -10, 4);
 
-th_prime = theta.th + [0.1; 0.0; 0.0];
+th_prime = theta.th + [0.0; 0.1; 0.0];
 theta_prime = fill_theta_from_th(theta, th_prime, true);
 
 hmout = hessianMethod(model, y, theta, 'GradHess', 'Long');
@@ -34,13 +34,16 @@ sh = compute_shape(prior, hmout, theta);
 hmout_prime = hessianMethod(model, y, theta_prime, 'GradHess', 'Long');
 sh_pr = compute_shape(prior, hmout_prime, theta_prime);
 
-%shape_diagnostics(theta.th, sh.prior, th_prime, sh_pr.prior);
+shape_diagnostics(theta.th, sh.prior, th_prime, sh_pr.prior);
 %shape_diagnostics(theta.th, sh.like, th_prime, sh_pr.like);
 %shape_diagnostics(theta.th, sh.post, th_prime, sh_pr.post);
 
-%shape_diagnostics(theta.th(1:2), sh.prior2, th_prime(1:2), sh_pr.prior2);
+sh.prior2.g
+sh.prior2.H
+
+shape_diagnostics(theta.th(1:2), sh.prior2, th_prime(1:2), sh_pr.prior2);
 %shape_diagnostics(theta.th(1:2), sh.like2, th_prime(1:2), sh_pr.like2);
-shape_diagnostics(theta.th(1:2), sh.post2, th_prime(1:2), sh_pr.post2);
+%shape_diagnostics(theta.th(1:2), sh.post2, th_prime(1:2), sh_pr.post2);
 
 %shape_diagnostics(theta.th(1:2), sh.int1, th_prime(1:2), sh_pr.int1);
 %shape_diagnostics(theta.th(1:2), sh.int2, th_prime(1:2), sh_pr.int2);

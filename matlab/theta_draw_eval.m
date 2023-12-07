@@ -4,13 +4,9 @@ function [lnq_thSt, varargout] = ...
 	% Simulation parameters
 	global hmctrl;
 	if exist('hmctrl', 'var')
-		th2_rho = hmctrl.th2_rho;
-		th2_mag = hmctrl.th2_mag;
 		mu_mag = hmctrl.mu_mag;
 		nu = hmctrl.nu;
 	else
-		th2_rho = [0.1; 0.1];
-		th2_mag = [1.2; 1.2];
 		mu_mag = 1.05;
 		nu = 10;
 	end
@@ -32,68 +28,37 @@ function [lnq_thSt, varargout] = ...
 	if ~isfield(hmout, 'sh')
 		hmout.sh = compute_proposal_params(model, prior, y, mode_sh, theta, hmout);
 	end
-	H = hmout.sh.params.H2;
-	g = hmout.sh.params.g2;
-	th2_unc_mean = hmout.sh.params.mean2;
-
-	% Compute eigenvalues for epsilon precision
-	[V, D] = eig(H);
-	D_prec_eps = -diag(1./(th2_mag .* (1-th2_rho.^2))) * D;  % Innovation precision eigenvalues
-	D_prec_eps_root = sqrt(D_prec_eps);                 % Square roots of these
-
-	% Unconditional mean and conditional mean for AR draw
-	th2_con_mean = th2_rho .* theta.th(1:2) + (1 - th2_rho) .* th2_unc_mean;
+	th2_unc_mean = hmout.sh.params.th_hat;
+	th2_con_mean = th2_unc_mean;
 
 	% Bivariate normal code
-	% {
 	H = hmout.sh.params.H2_3rd;
 	[V, D] = eig(H);
-	D_prec_eps = -diag(1./(th2_mag .* (1-th2_rho.^2))) * D;  % Innovation precision eigenvalues	
-	D_prec_eps_root = sqrt(D_prec_eps);
-	if min(abs(D_prec_eps_root(1,1)), abs(D_prec_eps_root(2,2))) < 0.01
-		display(D_prec_eps)
-		display(hmout.sh.params.H2)
-		display(D)
-		display(H)
-	end
+	prec_eps = -D;  % Innovation precision eigenvalues	
+	prec_eps_root = sqrt(prec_eps);
 	if is_draw
 		uSt = trnd([nu;nu]); %randn(2, 1);
-		delta_th2 = V*inv(D_prec_eps_root)*V' * uSt;
-		[L_plus_res, L] = directional_3rd(n, H, th2_con_mean, delta_th2);
-		L_plus_res = sign(L_plus_res) * min(abs(L_plus_res), 3);
-		if (rand < exp(L_plus_res) / (exp(L_plus_res) + exp(-L_plus_res)))
+		delta_th2 = V*inv(prec_eps_root)*V' * uSt;
+		L_plus = directional_3rd(n, H, th2_con_mean, delta_th2);
+		L_plus = sign(L_plus) * min(abs(L_plus), 3);
+		if (rand < exp(L_plus) / (exp(L_plus) + exp(-L_plus)))
 			thSt2 = th2_con_mean + delta_th2;
-			lnq_thSt = L_plus_res - log(cosh(L_plus_res));
+			lnq_thSt = L_plus - log(cosh(L_plus));
 		else
 			thSt2 = th2_con_mean - delta_th2;
-			lnq_thSt = -L_plus_res - log(cosh(L_plus_res));
+			lnq_thSt = -L_plus - log(cosh(L_plus));
 		end
 	else
 		thSt = thetaSt.th;
 		thSt2 = thSt(1:2);
 		delta_th2 = thSt2 - th2_con_mean;
-		uSt = V*D_prec_eps_root*V' * delta_th2;
-		[L_plus_res, L] = directional_3rd(n, H, th2_con_mean, delta_th2);
-		L_plus_res = sign(L_plus_res) * min(abs(L_plus_res), 3);
-		lnq_thSt = L_plus_res - log(cosh(L_plus_res));
+		uSt = V*prec_eps_root*V' * delta_th2;
+		L_plus = directional_3rd(n, H, th2_con_mean, delta_th2);
+		L_plus = sign(L_plus) * min(abs(L_plus), 3);
+		lnq_thSt = L_plus - log(cosh(L_plus));
 	end
-	%lnq_thSt = lnq_thSt + 0.5 * (log(det(D_prec_eps)) - uSt'*uSt);
-	lnq_thSt = lnq_thSt + 0.5 * (log(det(D_prec_eps)) ...
+	lnq_thSt = lnq_thSt + 0.5 * (log(det(prec_eps)) ...
 		- (nu-1) * log( (nu+uSt(1)^2) * (nu+uSt(2)^2) ));
-	% }
-
-	% Double gamma code
-	%{
-	is_chol = false;
-	if is_draw
-		[lnq_thSt, thSt2] = double_gamma(-V*D_prec_eps*V', is_chol);
-		thSt2 = thSt2 + th2_con_mean;
-	else
-		thSt = thetaSt.th;
-		thSt2 = thSt(1:2);
-		lnq_thSt = double_gamma(-V*D_prec_eps*V', is_chol, thSt2 - th2_con_mean);
-	end
-	%}
 
 	% Conditional draw/eval of th3St given thSt
 	if has_mu
@@ -106,9 +71,16 @@ function [lnq_thSt, varargout] = ...
 		% Conditional precision of mu at new values of omega, phi
 		muSt_ml_prec = om_q_iotaSt - hmout.sh.V33;
 		delta = thSt2 - hmout.sh.th2;
-		muSt_ml_prec = muSt_ml_prec - delta' * hmout.sh.V33_th;
-		muSt_ml_prec = muSt_ml_prec - 0.5 * delta' * hmout.sh.V33_th_th * delta;
-		muSt_ml_prec = max(muSt_ml_prec, 0.1 * om_q_iotaSt);
+		V33 = hmout.sh.V33;
+		V33_th = hmout.sh.V33_th;
+		V33_th_th = hmout.sh.V33_th_th;
+		log_V33 = log(V33);
+		log_V33_th = (1/V33) * V33_th;
+		log_V33_th_th = -(1/V33^2) * V33_th * V33_th' + (1/V33) * V33_th_th;
+		log_V33_pred = log_V33 + delta' * log_V33_th + 0.5 * delta' * log_V33_th_th * delta;
+		
+		muSt_ml_prec = om_q_iotaSt - exp(log_V33_pred);
+		muSt_ml_prec = max(muSt_ml_prec, 0.5 * om_q_iotaSt);
 
 		% Values of mu maximizing likelihood for (omega, phi) and
 		% proposal (omegaSt, phiSt)

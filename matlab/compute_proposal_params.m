@@ -37,24 +37,23 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 	step_Hhat_coeff = [0.8, 0.6, 0.5];
 	step_Hbar_coeff = [0.1, 0.3, 0.5];
 	mode_Hhat_chi2_q = [2.7055, 3.8415, 5.4119];
-	%mode_Hhat_coeff = [0.9, 0.7, 0.5];
-	%mode_Hbar_coeff = [0.1, 0.3, 0.5];
-	mode_Hhat_coeff = [0.0, 0.0, 0.0];
-	mode_Hbar_coeff = [1.0, 1.0, 1.0];
 
 	max_iters = 5;
 	sh = compute_shape(prior, hmout, theta);
  	theta_prime = theta;
  	sh_prime = sh;
- 	I = (rand < 1e-3);
+ 	I = (rand < 1e-4);
 	for iter = 1:max_iters
 
 		% Eigenvector decomposition, local chi2 values
 		H = sh_prime.post2.H;
 		g = sh_prime.post2.g;
-		[V, D] = eig(H);
+		
+		[V, d] = eig(H, 'vector');
+		[d, ind] = sort(d);
+		V = V(:, ind);
+
 		v2 = (V' * g).^2;
-		d = diag(D);
 		local_chi2 = -v2 ./ d;
 		if (iter == 1)
 			old_local_chi2 = local_chi2;
@@ -72,28 +71,11 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 
 		% No, compute new value of theta prime.
 
-		% {
-		if I
-			fprintf("Iteration %i, trust %i\n", iter, trust)
-			fprintf("Old H, g, th2:\n")
-			display(sh.post2.H)
-			display(sh.post2.g)
-			display(theta.th(1:2))
-			display(old_local_chi2)
-			display(old_raw_th2)
-			fprintf("Current H, g, th2:\n")
-			display(sh_prime.post2.H)
-			display(sh_prime.post2.g)
-			display(sh_prime.th2)
-			display(local_chi2)
-		end
-		% }
-
 		% First regularize H to Hhat by manipulating eigenvalues.
         q = step_Hhat_chi2_q(trust);
-		D(1,1) = min(D(1,1), -v2(1)/q);
-		D(2,2) = min(D(2,2), -v2(2)/q);
-		Hhat = V*D*V';
+		d(1) = min(d(1), -v2(1)/q);
+		d(2) = min(d(2), -v2(2)/q);
+		Hhat = V*diag(d)*V';
 
 		gbar = Hbar * (sh_prime.th2 - mode_sh.th2);
 
@@ -102,13 +84,7 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 		g = step_Hhat_coeff(trust) * sh_prime.post2.g + step_Hbar_coeff(trust) * gbar;
 
 		% Use this information to generate another value of theta prime.
-		if max(d) < 0
-			th2_prime = sh_prime.th2 - H\g;
-			%th2_prime = sh_prime.th2 + g/(g'*g);
-		else
-			th2_prime = sh_prime.th2 - H\g;
-			%th2_prime = sh_prime.th2 + g/(g'*g);
-		end
+		th2_prime = sh_prime.th2 - H\g;
 		if has_mu
 			mu_prime = theta_prime.mu - mode_sh.post.g(3) / mode_sh.post.H(3, 3);
 			th_prime = [th2_prime; mu_prime];
@@ -122,47 +98,50 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 		sh_prime = compute_shape(prior, hmout, theta_prime);
 	end
 
-	% Next option, regularize H to Hhat.
-	%{
-    q = mode_Hhat_chi2_q(trust);
-	D(1,1) = min(D(1,1), -v2(1)/q);
-	D(2,2) = min(D(2,2), -v2(2)/q);
-	Hhat = V*D*V';
-	th_hat = theta_prime.th(1:2) - V*inv(D)*V'*g;
-	%}
+	th2_int = theta_prime.th(1:2);
+	[omqiota, omqpiota, omqppiota] = compute_omqiota(theta.N, th2_int);
+	w1 = [omqiota; omqpiota] / sqrt(omqiota^2 + omqpiota^2);
+	w2 = [-omqpiota; omqiota] / sqrt(omqiota^2 + omqpiota^2);
+	H_int = sh_prime.like2.H;
 
-	th_mid = theta_prime.th(1:2) - 0.5 * V*inv(D)*V'*g;
-	[omqiota, omqpiota, omqppiota] = compute_omqiota(theta.N, th_mid);
-	H_mid_12 = sh_prime.L12_norm * omqpiota;
-	H_mid_22_1 = sh_prime.L22_const + sh_prime.L12_norm * omqppiota;
-	H_mid_22 = min(H_mid_22_1, sh_prime.L22_norm * omqppiota);
-	H_mid_11 = sh_prime.L11_const + sh.L12_norm * omqiota;
-	H_mid = [H_mid_11, H_mid_12; H_mid_12, H_mid_22];
-	if max(eig(H_mid)) > -0.01
-		fprintf("Eigenvalue greater than -0.01\n")
-		display(th_mid)
-		display(H_mid)
+	n_steps = 4;
+	h = 1/n_steps;
+	Hp = sh_prime.prior2.H;
+	for step = 1:n_steps
+		th2_int = th2_int - h * ((H_int + Hp)\g);
+		[omqiota, omqpiota, omqppiota] = compute_omqiota(theta.N, th2_int);
+		H_int_12 = sh_prime.L12_norm * omqpiota;
+		H_int_22_1 = sh_prime.L22_const + sh_prime.L12_norm * omqppiota;
+		H_int_22 = min(H_int_22_1, sh_prime.L22_norm * omqppiota);
+		H_int_11 = sh_prime.L11_const + sh_prime.L12_norm * omqiota;
+		H_int = [H_int_11, H_int_12; H_int_12, H_int_22];
 	end
-	th_hat = th_mid - 0.5 * (H_mid \ g);
-	[omqiota, omqpiota, omqppiota] = compute_omqiota(theta.N, th_hat);
-	H_hat_12 = sh_prime.L12_norm * omqpiota;
-	H_hat_22_1 = sh_prime.L22_const + sh_prime.L12_norm * omqppiota;
-	H_hat_22 = min(H_hat_22_1, sh_prime.L12_norm * omqiota);
-	H_hat_11 = sh_prime.L11_const + sh_prime.L12_norm * omqiota;
-	Hhat = [H_hat_11, H_hat_12; H_hat_12, H_hat_22];
+	H_hat = H_int;      % likelihood only
+	th_hat = th2_int;   % posterior
 
 	gbar = Hbar * (sh_prime.th2 - mode_sh.th2);
 
 	% Next blend in a bit of global information, depending on trust levels.
 	sh_prime.params.th2 = theta_prime.th(1:2);
-	sh_prime.params.g2 = mode_Hhat_coeff(trust) * g + mode_Hbar_coeff(trust) * gbar;
-	sh_prime.params.H2 = mode_Hhat_coeff(trust) * Hhat + mode_Hbar_coeff(trust) * Hbar;
 	sh_prime.params.n_iters = iter;
-	sh_prime.params.mean2 = theta_prime.th(1:2) - sh_prime.params.H2\sh_prime.params.g2;
+	sh_prime.params.th_hat = th_hat;
 	d = th_hat - mode_sh.th2;
 	sh_prime.params.th_hat_distance = -0.5 * d' * mode_sh.post2.H * d;
 
-	[Lp, sh_prime.params.H2_3rd] = directional_3rd(theta.N, sh_prime.params.H2, th_hat);
+	sh_prime.params.Hhat = [H_hat(1,1), H_hat(1,2), H_hat(2,2)];
+	[V, D] = eig(H_hat);
+	sh_prime.params.Hhat_eigs = diag(D)';
+	sh_prime.params.Hhat_Vmax = max(abs(V(:,1)));
+	sigma = 1./sqrt(diag(-D));
+	lambda = 2.5;
+	L_plus_1 = directional_3rd(theta.N, H_hat, th_hat, lambda*sigma(1)*V(:,1));
+	L_plus_2 = directional_3rd(theta.N, H_hat, th_hat, lambda*sigma(2)*V(:,2));
+	x1 = min(1, abs(L_plus_1)/lambda^2);
+	x2 = min(1, abs(L_plus_2)/lambda^2);
+	fact1 = max(1 - x1, 0.5) * 0.95;
+	fact2 = max(1 - x2, 0.5) * 0.95;
+	D_new = diag(diag(D) .* [fact1; fact2]);
+	sh_prime.params.H2_3rd = V*D_new*V' + Hp;
 
 	% For mu|theta,y draw
 	sh_prime.params.like_H33 = sh.like.H(3,3);
