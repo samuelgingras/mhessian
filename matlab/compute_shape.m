@@ -7,6 +7,8 @@ function sh = compute_shape(prior, hmout, theta)
 	sh.like.v = hmout.lnp_y__x + hmout.lnp_x - hmout.lnq_x__y;
 	sh.like.g = q_theta.grad;
 	sh.like.H = q_theta.Hess + q_theta.Var;
+	sh.like.Var = q_theta.Var;
+	sh.like.Hess = q_theta.Hess;
 
 	sh.post.v = sh.prior.v + sh.like.v;
 	sh.post.g = sh.prior.g + sh.like.g;
@@ -63,7 +65,11 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.like2.g = sh.like.g(1:2) + L_mu_th * mu_diff + 0.5 * L_mu_mu_th * mu_diff^2;
 		sh.like2.H = sh.like.H(1:2, 1:2) ...
 			+ L_mu_th_th * mu_diff + 0.5 * L_mu_mu_th_th * mu_diff^2;
+		sh.like2.Hess = sh.like.Hess(1:2, 1:2) ...
+			+ L_mu_th_th * mu_diff + 0.5 * L_mu_mu_th_th * mu_diff^2;
+		sh.like2.Var = sh.like.Var(1:2, 1:2);
 
+		%{
 		h_bar = -sh.prior.H(3,3);
 		g_bar = sh.prior.g(3);
 		mu_less_m = sh.like.g(3)/sh.like.H(3,3);
@@ -87,7 +93,9 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.I.v = I;
 		sh.I.g = I_th;
 		sh.I.H = I_th_th;
+		%}
 
+		%{
 		sh.int2.v = L_mu_mu;
 		sh.int2.g = L_mu_mu_th;
 		sh.int2.H = L_mu_mu_th_th;
@@ -95,14 +103,15 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.int3.v = L_mu;
 		sh.int3.g = L_mu_th;
 		sh.int3.H = L_mu_th_th;
+		%}
 
 		sh.prior2.v = sh.prior.v;
 		sh.prior2.g = sh.prior.g(1:2);
 		sh.prior2.H = sh.prior.H(1:2, 1:2);
 
-		sh.post2.v = sh.like2.v + sh.prior.v + I;
-		sh.post2.g = sh.like2.g + sh.prior.g(1:2) + I_th;
-		sh.post2.H = sh.like2.H + sh.prior.H(1:2, 1:2) + I_th_th;
+		sh.post2.v = sh.like2.v + sh.prior.v;% + I;
+		sh.post2.g = sh.like2.g + sh.prior.g(1:2);% + I_th;
+		sh.post2.H = sh.like2.H + sh.prior.H(1:2, 1:2);% + I_th_th;
 
 		sh.L_mu_mu_mu = L_mu_mu_mu;
 	else
@@ -113,10 +122,14 @@ function sh = compute_shape(prior, hmout, theta)
 	end
 
 	% New stuff related to third derivatives
-	sh.L12_norm = (sh.like2.H(1,2) + sh.I.H(1,2)) / hp;
-	sh.L11_const = (sh.like2.H(1,1) + sh.I.H(1,1)) - sh.L12_norm * h;
-	sh.L22_norm = (sh.like2.H(2,2) + sh.I.H(2,2)) / hpp;
-	sh.L22_const = (sh.like2.H(2,2) + sh.I.H(2,2)) - sh.L12_norm * hpp;
+	%sh.L12_norm = (sh.like2.H(1,2) + sh.I.H(1,2)) / hp;
+	%sh.L11_const = (sh.like2.H(1,1) + sh.I.H(1,1)) - sh.L12_norm * h;
+	%sh.L22_norm = (sh.like2.H(2,2) + sh.I.H(2,2)) / hpp;
+	%sh.L22_const = (sh.like2.H(2,2) + sh.I.H(2,2)) - sh.L12_norm * hpp;
+	sh.L12_norm = sh.like2.H(1,2) / hp;
+	sh.L11_const = sh.like2.H(1,1) - sh.L12_norm * h;
+	sh.L22_norm = sh.like2.H(2,2) / hpp;
+	sh.L22_const = sh.like2.H(2,2) - sh.L12_norm * hpp;
 
 	sh.omqiota = h;
 end
