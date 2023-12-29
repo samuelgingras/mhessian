@@ -68,6 +68,8 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.like2.Hess = sh.like.Hess(1:2, 1:2) ...
 			+ L_mu_th_th * mu_diff + 0.5 * L_mu_mu_th_th * mu_diff^2;
 		sh.like2.Var = sh.like.Var(1:2, 1:2);
+		X01_inv = -(2/(omega*(1-phi^2)^2)) * [1-phi^2, -phi; 2*phi*(1-phi^2), -(1+phi^2)];
+		sh.like2.Sigma = X01_inv * sh.like2.Var * X01_inv';
 
 		%{
 		h_bar = -sh.prior.H(3,3);
