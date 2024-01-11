@@ -69,17 +69,19 @@ function [lnq_thSt, varargout] = ...
 		om_q_iotaSt = omegaSt * (2*(1-phiSt) + (n-2)*(1-phiSt)^2);
 
 		% Conditional precision of mu at new values of omega, phi
-		muSt_ml_prec = om_q_iotaSt - hmout.sh.V33;
 		delta = thSt2 - hmout.sh.th2;
-		V33 = hmout.sh.V33;
-		V33_th = hmout.sh.V33_th;
-		V33_th_th = hmout.sh.V33_th_th;
+		V33 = hmout.sh.V_mu_mu;
+		V33_th = hmout.sh.V_mu_mu_th;
+		V33_th_th = hmout.sh.V_mu_mu_th_th;
+		V33_pred = V33 + V33_th' * delta + 0.5 * delta' * V33_th_th * delta;
+
 		log_V33 = log(V33);
 		log_V33_th = (1/V33) * V33_th;
 		log_V33_th_th = -(1/V33^2) * V33_th * V33_th' + (1/V33) * V33_th_th;
 		log_V33_pred = log_V33 + delta' * log_V33_th + 0.5 * delta' * log_V33_th_th * delta;
 		
-		muSt_ml_prec = om_q_iotaSt - exp(log_V33_pred);
+		%muSt_ml_prec = om_q_iotaSt - exp(log_V33_pred);
+		muSt_ml_prec = om_q_iotaSt - V33_pred;
 		muSt_ml_prec = max(muSt_ml_prec, 0.5 * om_q_iotaSt);
 
 		% Values of mu maximizing likelihood for (omega, phi) and

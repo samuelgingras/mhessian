@@ -163,15 +163,21 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 
 		% Fourth idea, based on analytical derivation of derivatives of H22
 		phi = tanh(th2_int(2));
-		H221 = H_int(2,2) + (2*(1-phi^2)) * V(1,1) - 4*phi * V(2,1);
-		H222 = -2*(3*phi^2+1) * Hess_12 - 6*phi * Hess_22 ...
-		    + (2*(1-phi^2)) * V(1,2) - 4*phi * V(2,2);
-		Hess_12 = Hess_12 + H_int(1,2) * delta(1) + H_int(2,2) * delta(2);
+		% These five lines confirmed Jan 11
+		Cov_2_22 = (2*(1-phi^2)) * V(1,2) - 4*phi * V(2,2);
+		H221 = H_int(2,2) + (2*(1-phi^2)) * V(1,1) - 4*phi * V(1,2);
+		H222 = -2*(3*phi^2+1) * Hess_12 - 6*phi * Hess_22 + Cov_2_22;
 		Hess_22 = Hess_22 + H221 * delta(1) + H222 * delta(2);
-		V(1,1) = V(1,1) - H_int(1,1) * delta(1) - H_int(1,2) * delta(2);
+		Hess_12 = Hess_12 + H_int(1,2) * delta(1) + H_int(2,2) * delta(2);
+
+		S = 1-sqrt(V(1,1)/((theta.N-1)/2));
+		V(1,1) = V(1,1) + 2 * V(1,1) * S * delta(1) - V(1,1) * S * delta(2);
+		%V(1,2) = -V(1,1) * S * delta(1) - V(1,2) * delta(2);
 		V(2,2) = lm * Hess_22;
 		L111 = -0.0 * H_int(1,1);
 		L112 = -0.5 * H_int(1,1);
+		L111 = H_int(1,1) + 2*V(1,1) * S;
+		%L112 = -V(1,1) * S;
 		L221 = H221 * (1+lm);
 		L222 = H222;
 		H_int_11 = H_int(1,1) + L111 * delta(1) + L112 * delta(2);

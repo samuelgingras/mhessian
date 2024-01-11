@@ -25,51 +25,64 @@ function sh = compute_shape(prior, hmout, theta)
 		h = omega * (1-phi) * ((n-2)*(1-phi) + 2);
 		hp = -omega * (1-phi^2) * (2*(n-2)*(1-phi) + 2);
 		hpp = 2*omega * (1-phi^2) * ((n-2)*(1+3*phi)*(1-phi) + 2*phi);
+		g3 = q_theta.grad(3);
+		V13 = q_theta.Var(1,3);
+		V23 = q_theta.Var(2,3);
+		V33 = q_theta.Var(3,3);
+		H23 = q_theta.Hess(2,3);
+		H33 = q_theta.Hess(3,3);
 		
 		% New November 1-3 stuff to obtain L_opt_th, L_opt_th_th
 		% Quantities obtained without further approximation
-		omq_Ee = sh.like.g(3);
-		omqp_Ee = q_theta.Hess(2,3);
-		omq_Ee1 = q_theta.Var(1,3);
-		omq_Ee2 = q_theta.Var(2,3);
-		omq_Eemu = sh.like.H(3,3);
-		V33 = q_theta.Var(3,3);
+
 		% Quantities requiring further approximations
-		omqpp_Ee = -2*((1+phi)^2 * omq_Ee + (1+2*phi) * omqp_Ee);  % u_3 in notes
-		omqp_Ee1 = -2*(1+phi) * omq_Ee1;                           % u_2 in notes
-		omqp_Ee2 = -2*(1+phi) * omq_Ee2;                           % u_5 in notes
+		mean_223 = -2*((1+phi)^2 * g3 + (1+2*phi) * H23);  % u_3 in notes
+		Cov_1_23 = -2*(1+phi) * V13;
+		Cov_2_23 = -2*(1+phi) * V23;
 		V33_outer = omega * (1-phi) * q_theta.xp(1);
 		V33_inner = V33 - V33_outer;
-		V33_11 = V33;
 		V33_12 = -2*(1+phi) * V33_inner - (1+phi) * V33_outer;
 		V33_22 = 2*(1+phi)*(1+3*phi) * V33_inner + 2*(1+phi)*phi * V33_outer;
-		omqp_Eemu = V33_12 - hp;                                   % u_1 in notes
-		omqpp_Eemu = V33_22 - hpp;                                 % u_4 in notes
 
-		sh.V33 = V33;
-		sh.V33_th = [V33_11; V33_12];            % Extracts V33 derivs from L_mu_mu_th ...
-		sh.V33_th_th = [V33, V33_12; V33_12, V33_22]; % ... and L_mu_mu_th_th
-
-		L_mu = sh.like.g(3);
+		L_mu = g3;
+		sh.V_mu_mu = V33;
 		L_mu_mu = sh.like.H(3,3);
 		L_mu_mu_mu = q_theta.L_mu_mu_mu;
+ 		L_mu_th = sh.like.H(1:2,3);
 
-		L_mu_th = sh.like.H(1:2,3);
-		L_mu_mu_th = [omq_Eemu; omqp_Eemu];
-		L_mu_th_th = [omq_Ee + 2*omq_Ee1, omqp_Ee + omqp_Ee1 + omq_Ee2; ...
-					  omqp_Ee + omqp_Ee1 + omq_Ee2, omqpp_Ee + 2*omqp_Ee2];
-		L_mu_mu_th_th = [omq_Eemu, omqp_Eemu; omqp_Eemu, omqpp_Eemu];
+ 		H_mu_mu_th = [-h; -hp];
+ 		sh.V_mu_mu_th = [2*V33; 2*V33_12];
+		L_mu_mu_th = H_mu_mu_th + sh.V_mu_mu_th;
+
+		H_mu_th_th = [g3 + V13, H23 + V23; H23 + V23, mean_223 + Cov_2_23];
+		V_mu_th_th = [2*V13, Cov_1_23 + V23; Cov_1_23 + V23, Cov_2_23];
+		L_mu_th_th = H_mu_th_th + V_mu_th_th;
+			%[g3 + 3*V13, H23 + Cov_1_23 + 2*V23; H23 + Cov_1_23 + 2*V23, mean_223 + 2*Cov_2_23];
+
+		H_mu_mu_th_th = [-h, -hp; -hp, -hpp];
+		sh.V_mu_mu_th_th = [4*V33, 4*V33_12; 4*V33_12, 2*V33_22 + 8*(1+phi)^2*V33];
+		L_mu_mu_th_th = H_mu_mu_th_th + sh.V_mu_mu_th_th;
+
 		mu_diff = -L_mu / (L_mu_mu - 0.5 * L_mu_mu_mu * L_mu / L_mu_mu);
 		sh.like2.v = sh.like.v + L_mu * mu_diff ...
 			+ L_mu_mu * mu_diff^2 / 2 + L_mu_mu_mu * mu_diff^2 / 6;
 		sh.like2.g = sh.like.g(1:2) + L_mu_th * mu_diff + 0.5 * L_mu_mu_th * mu_diff^2;
 		sh.like2.H = sh.like.H(1:2, 1:2) ...
 			+ L_mu_th_th * mu_diff + 0.5 * L_mu_mu_th_th * mu_diff^2;
+
 		sh.like2.Hess = sh.like.Hess(1:2, 1:2) ...
-			+ L_mu_th_th * mu_diff + 0.5 * L_mu_mu_th_th * mu_diff^2;
-		sh.like2.Var = sh.like.Var(1:2, 1:2);
-		X01_inv = -(2/(omega*(1-phi^2)^2)) * [1-phi^2, -phi; 2*phi*(1-phi^2), -(1+phi^2)];
-		sh.like2.Sigma = X01_inv * sh.like2.Var * X01_inv';
+			+ H_mu_th_th * mu_diff + 0.5 * H_mu_mu_th_th * mu_diff^2;
+		sh.like2.Var = sh.like.Var(1:2, 1:2) ...
+			+ V_mu_th_th * mu_diff + 0.5 * sh.V_mu_mu_th_th * mu_diff^2;
+
+		% Following quantities are used only for testing derivatives
+		sh.L_mu_shape.v = L_mu;
+		sh.L_mu_shape.g = [L_mu_th; L_mu_mu];
+		sh.L_mu_shape.H = [L_mu_th_th, L_mu_mu_th; L_mu_mu_th', L_mu_mu_mu];
+
+		sh.L_mu_mu_shape.v = L_mu_mu;
+		sh.L_mu_mu_shape.g = L_mu_mu_th;
+		sh.L_mu_mu_shape.H = L_mu_mu_th_th;
 
 		%{
 		h_bar = -sh.prior.H(3,3);
