@@ -113,13 +113,18 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 	gp = sh_prime.prior2.g;
 
 	H = sh_prime.like2.Hess;
-	Hess_12 = H(1,2);
-	Hess_22 = H(2,2);
 	V = sh_prime.like2.Var;
 	L = H + V;
 
+	if max(eig(L)) > -1
+		fprintf("Bad eig going in\n")
+		display(H);
+		display(V);
+		display(L);
+	end
+
 	Delta = (mode_sh.th2 - sh_prime.th2);
-	lm = V(2,2) / Hess_22;
+	lm = V(2,2) / H(2,2);
 	for step = 1:n_steps
 		delta = h * Delta; % -((H_int + Hp)\g);
 		th2_int = th2_int + delta;
@@ -163,28 +168,59 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 
 		% Fourth idea, based on analytical derivation of derivatives of H22
 		phi = tanh(th2_int(2));
-		% These five lines confirmed Jan 11
-		Cov_2_22 = (2*(1-phi^2)) * V(1,2) - 4*phi * V(2,2);
-		H221 = H_int(2,2) + (2*(1-phi^2)) * V(1,1) - 4*phi * V(1,2);
-		H222 = -2*(3*phi^2+1) * Hess_12 - 6*phi * Hess_22 + Cov_2_22;
-		Hess_22 = Hess_22 + H221 * delta(1) + H222 * delta(2);
-		Hess_12 = Hess_12 + H_int(1,2) * delta(1) + H_int(2,2) * delta(2);
+		% Update of H
+		H111 = L(1,1);
+		H112 = L(1,2);
+		H121 = H112;
+		H122 = L(2,2);
+		Cov_1_22 = 2*(1-phi^2) * V(1,1) - 4*phi * V(1,2);
+		Cov_2_22 = 2*(1-phi^2) * V(1,2) - 4*phi * V(2,2);
+		H221 = H(2,2) + Cov_1_22;
+		mean_222 = -2*(3*phi^2+1) * H(1,2) - 6*phi * H(2,2);
+		H222 = mean_222 + Cov_2_22;
+		H(1,1) = H(1,1) + H111 * delta(1) + H112 * delta(2);
+		H(1,2) = H(1,2) + H121 * delta(1) + H122 * delta(2);
+		H(2,1) = H(1,2);
+		H(2,2) = H(2,2) + H221 * delta(1) + H222 * delta(2);
 
+		% Update of V;
 		S = 1-sqrt(V(1,1)/((theta.N-1)/2));
-		V(1,1) = V(1,1) + 2 * V(1,1) * S * delta(1) - V(1,1) * S * delta(2);
-		%V(1,2) = -V(1,1) * S * delta(1) - V(1,2) * delta(2);
-		V(2,2) = lm * Hess_22;
-		L111 = -0.0 * H_int(1,1);
-		L112 = -0.5 * H_int(1,1);
-		L111 = H_int(1,1) + 2*V(1,1) * S;
-		%L112 = -V(1,1) * S;
+		V111 = 2*V(1,1)*S;
+		V112 = -V(1,1)*S;
+		V121 = V112;
+		V122 = Cov_1_22 + V(2,2);
+		V(1,1) = V(1,1) + V111 * delta(1) + V112 * delta(2);
+		V(1,2) = V(1,2) + V121 * delta(1) + V122 * delta(2);
+		V(2,1) = V(1,2);
+		V221 = 2*Cov_1_22;
+		V(2,2) = lm * H(2,2);
+
+		% Update of L;
+		L = H + V;
+		L(1,1) = min(L(1,1), L(1,2)^2/(0.95*L(2,2)));
+
+		if max(eig(L)) > -1
+			display(H);
+			display(V);
+			display(L);
+			display(lm);
+			display(Delta);
+			display(step);
+			display(S);
+		end
+		%{
+		L111 = H_int(1,1) + 2*V(1,1)*S;
+		L112 = -H_int(1,1);
+		%L112 = H_int(1,2) - V(1,1)*S;
 		L221 = H221 * (1+lm);
 		L222 = H222;
-		H_int_11 = H_int(1,1) + L111 * delta(1) + L112 * delta(2);
-		H_int_22 = Hess_22 + V(2,2);
-		H_int_12 = H_int(1,2) + L112 * delta(1) + L221 * delta(2);
-		H_int_11 = min(H_int_11, H_int_12^2/(0.95*H_int_22));
-		H_int = [H_int_11, H_int_12; H_int_12, H_int_22];
+		%}
+		%H_int = H + V;
+		%H_int_11 = H_int(1,1) + L111 * delta(1) + L112 * delta(2);
+		%H_int_22 = Hess_22 + V(2,2);
+		%H_int_12 = H_int(1,2) + L112 * delta(1) + L221 * delta(2);
+		%H_int_11 = min(H_int_11, H_int_12^2/(0.95*H_int_22));
+		%H_int = [H_int_11, H_int_12; H_int_12, H_int_22];
 	end
 	%fprintf("New H_int: (%f, %f, %f)\n", H_int(1,1), H_int(1,2), H_int(2,2))
 
@@ -208,7 +244,7 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 	%fprintf("Mode based H_int: (%f, %f, %f)\n\n", H_int(1,1), H_int(1,2), H_int(2,2))
 
 	omqi_hat = omqiota;
-	H_hat = H_int;      % likelihood only
+	H_hat = L;          % likelihood only
 	th_hat = th2_int;   % posterior
 
 	gbar = Hbar * (sh_prime.th2 - mode_sh.th2);

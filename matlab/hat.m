@@ -193,22 +193,23 @@ function [BINT, R2] = hat(sim)
 	yline(2*true_phi_hat/sqrt(4*true_phi_hat^2 + 1), 'r');
 	yline((2+2*true_phi_hat)/sqrt(4*(1+true_phi_hat)^2 + 1), 'r');
 
+	colour = th(f,2);
 	figure(7);
-	scatter(H0(f,1), H_hat(f,1), [], col);
+	scatter(H0(f,1), H_hat(f,1), [], colour);
 	title('Transformation of H11')
 	xline(true_H_hat(1,1));
 	yline(true_H_hat(1,1));
 	axis image;
 
 	figure(8);
-	scatter(H0(f,2), H_hat(f,2), [], col);
+	scatter(H0(f,2), H_hat(f,2), [], colour);
 	title('Transformation of H12')
 	xline(true_H_hat(1,2));
 	yline(true_H_hat(1,2));
 	axis image;
 
 	figure(9)
-	scatter(H0(f,3), H_hat(f,3), [], col);
+	scatter(H0(f,3), H_hat(f,3), [], colour);
 	title('Transformation of H22')
 	xline(true_H_hat(2,2));
 	yline(true_H_hat(2,2));
