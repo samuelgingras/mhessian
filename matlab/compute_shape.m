@@ -57,10 +57,9 @@ function sh = compute_shape(prior, hmout, theta)
 		H_mu_th_th = [g3 + V13, H23 + V23; H23 + V23, mean_223 + Cov_2_23];
 		V_mu_th_th = [2*V13, Cov_1_23 + V23; Cov_1_23 + V23, Cov_2_23];
 		L_mu_th_th = H_mu_th_th + V_mu_th_th;
-			%[g3 + 3*V13, H23 + Cov_1_23 + 2*V23; H23 + Cov_1_23 + 2*V23, mean_223 + 2*Cov_2_23];
 
 		H_mu_mu_th_th = [-h, -hp; -hp, -hpp];
-		sh.V_mu_mu_th_th = [4*V33, 4*V33_12; 4*V33_12, 2*V33_22 + 8*(1+phi)^2*V33];
+		sh.V_mu_mu_th_th = [4*V33, 4*V33_12; 4*V33_12, 2*V33_22 + 0*8*(1+phi)^2*V33];
 		L_mu_mu_th_th = H_mu_mu_th_th + sh.V_mu_mu_th_th;
 
 		mu_diff = -L_mu / (L_mu_mu - 0.5 * L_mu_mu_mu * L_mu / L_mu_mu);
@@ -75,6 +74,14 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.like2.Var = sh.like.Var(1:2, 1:2) ...
 			+ V_mu_th_th * mu_diff + 0.5 * sh.V_mu_mu_th_th * mu_diff^2;
 
+		c = 1/(theta.N-2);
+		X01_inv = (-2/(omega*(1-phi^2)*(1-phi^2+c))) * [1-phi^2, -phi; phi*(1-phi^2), -0.5*(1+phi^2+c)];
+		sh.like2.Sigma = X01_inv * sh.like2.Var * X01_inv';
+		[V, d] = eig(sh.like2.Sigma, 'vector');
+		sh.d1 = max(abs(d));
+		sh.d2 = min(abs(d));
+		sh.eps = 0.25*pi - acos(max(abs(V(:,1))));
+
 		% Following quantities are used only for testing derivatives
 		sh.L_mu_shape.v = L_mu;
 		sh.L_mu_shape.g = [L_mu_th; L_mu_mu];
@@ -83,6 +90,26 @@ function sh = compute_shape(prior, hmout, theta)
 		sh.L_mu_mu_shape.v = L_mu_mu;
 		sh.L_mu_mu_shape.g = L_mu_mu_th;
 		sh.L_mu_mu_shape.H = L_mu_mu_th_th;
+
+		sh.V_mu_mu_shape.v = sh.V_mu_mu;
+		sh.V_mu_mu_shape.g = sh.V_mu_mu_th;
+		sh.V_mu_mu_shape.H = sh.V_mu_mu_th_th;
+
+		sh.H_mu_mu_shape.v = H33;
+		sh.H_mu_mu_shape.g = H_mu_mu_th;
+		sh.H_mu_mu_shape.H = H_mu_mu_th_th;
+
+		sh.L11.v = sh.like.H(1,1);
+		sh.L11.g = L_mu_th_th(1,1);
+		sh.L11.H = L_mu_mu_th_th(1,1);
+
+		sh.L12.v = sh.like.H(1,2);
+		sh.L12.g = L_mu_th_th(1,2);
+		sh.L12.H = L_mu_mu_th_th(1,2);
+
+		sh.L22.v = sh.like.H(2,2);
+		sh.L22.g = L_mu_th_th(2,2);
+		sh.L22.H = L_mu_mu_th_th(2,2);
 
 		%{
 		h_bar = -sh.prior.H(3,3);

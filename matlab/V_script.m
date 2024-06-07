@@ -38,12 +38,12 @@ for i = 1:23
     V22n = V22./(phi.^2.*V11);
     sigma = s.sigma(f);
     omega = s.omega(f);
-    L11 = s.H0(f,1);
-    L12 = s.H0(f,2);
-    L22 = s.H0(f,3);
-    H11 = L11 - V11;
-    H12 = L12 - V12;
-    H22 = L22 - V22;
+    H11 = s.H0(f,1);
+    H12 = s.H0(f,2);
+    H22 = s.H0(f,3);
+    L11 = H11 + V11;
+    L12 = H12 + V12;
+    L22 = H22 + V22;
 
     g1 = 0.5*3139 + H11;
     g2 = H12 - phi;
@@ -58,9 +58,16 @@ for i = 1:23
     H122_noS = H22 + 2*V22 + (2*phi2_c.*V11 - 4*phi.*V12);
     H222_noS = -2*(3*phi.^2 + 1).*H12 - 6*phi.*H22 + 3*(2*phi2_c.*V12 - 4*phi.*V22);
 
-    y11 = L11 - H111_noS.*delta(:,1) - H112_noS.*delta(:,2);
-    y12 = L12 - H112_noS.*delta(:,1) - H122_noS.*delta(:,2);
-    y22 = L22 - H122_noS.*delta(:,1) - H222_noS.*delta(:,2);
+    Lhat11 = s.sh.like2.H(1,1);
+    Lhat12 = s.sh.like2.H(1,2);
+    Lhat22 = s.sh.like2.H(2,2);
+    y11 = Lhat11 - L11 - H111_noS.*delta(:,1) - H112_noS.*delta(:,2);
+    y12 = Lhat12 - L12 - H112_noS.*delta(:,1) - H122_noS.*delta(:,2);
+    y22 = Lhat22 - L22 - H122_noS.*delta(:,1) - H222_noS.*delta(:,2);
+
+    %y11 = V11;
+    %y12 = V12;
+    %y22 = V22;
 
     [b, bint, dum1, dum2, stats] = regress(y11, Xth);
     fprintf("%7.2f, %7.2f, %7.2f, %7.3f, ", b(1), b(2), b(3), stats(1));
@@ -134,5 +141,100 @@ for i = 1:23
     V22hat_beta(i,:) = b;
     V22hat_R2(i) = stats(1);
 end
-L = V + H;
-VV = [V(:,1).^1.5, V(:,1).*V(:,3).^0.5, V(:,1).^0.5.*V(:,3), V(:,3).^1.5];
+
+newt = zeros(23, 9);
+for i=1:23
+    s = sim_array{i};
+    th2_mode(i,:) = s.sh.th2';
+    omega_mode(i) = exp(th2_mode(i,1));
+    phi_mode(i) = tanh(th2_mode(i,2));
+
+    f = (s.niter == 1);
+    iota = f(f);
+    delta = s.th(f,1:2) - th2_mode(i,:);
+    Xth = [iota, delta];
+
+    y = log(s.d1(f));%.* sqrt(1-s.phi(f).^2));
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    fprintf("%6.3f, %5.3f, %6.3f, %6.3f, ", b(1), b(2), b(3), stats(1));
+    newt(i, 1) = b(1);
+    newt(i, 2) = b(2);
+    newt(i, 3) = b(3);
+   
+    y = log(s.omega(f).^2 .* s.d2(f));
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    fprintf("%6.3f, %6.3f, %6.3f, %6.3f, ", b(1), b(2), b(3), stats(1));
+    newt(i, 4) = b(1);
+    newt(i, 5) = b(2);
+    newt(i, 6) = b(3);
+
+    y = log(s.omega(f) .* s.ep(f));
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    fprintf("%6.2f, %7.3f, %6.3f, %6.3f\n", b(1), b(2), b(3), stats(1));
+    newt(i, 7) = b(1);
+    newt(i, 8) = b(2);
+    newt(i, 9) = b(3);
+
+    y = log(s.ep(f)) + log(s.d1(f)) - log(s.d2(f));
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    %fprintf("%6.2f, %7.3f, %6.3f, %6.3f\n", b(1), b(2), b(3), stats(1));
+
+    y = log(s.ep(f)) + log(1-s.phi(f)) + log(s.d1(f)) - log(s.d2(f));
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    %fprintf("%6.2f, %7.3f, %6.3f, %6.3f\n", b(1), b(2), b(3), stats(1));
+
+    y = s.V11_a(f);
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    %fprintf("%6.2f, %7.3f, %6.3f, %6.3f\n", b(1), b(2), b(3), stats(1));
+
+    y = s.V11_b(f);
+    [b, bint, dum1, dum2, stats] = regress(y, Xth);
+    %fprintf("%6.2f, %7.3f, %6.3f, %6.3f\n", b(1), b(2), b(3), stats(1));
+end
+
+col = V(:,3);
+
+figure(11)
+scatter(3139-2*V(:,1).*sqrt(V(:,1)/1569), 3139+t(:,1), [], col, 'filled')
+refline(1,0)
+title("Predicting Psi 30, n-2*V11*sqrt(V11/(n-2)")
+
+figure(12)
+scatter(-4*(1-phi_mode).*V(:,1).*sqrt(V(:,1)/1569), t(:,2), [], col, 'filled')
+refline(1,0)
+title("Predicting Psi 21, -4(1-phi)*V11*sqrt(V11/(n-2))")
+
+figure(13)
+scatter(V(:,2), -t(:,2), [], col, 'filled')
+refline(3.2,0)
+title("Predicting Psi 21, 3*V12")
+
+figure(14)
+scatter(V(:,2), t(:,5), [], col, 'filled')
+refline(6,0)
+title("Predicing Psi 12, 6*V12")
+
+figure(15)
+scatter(V(:,2), -t(:,8), [], col, 'filled')
+refline(20,0)
+title("Predicting Psi 03, 20*V12")
+
+figure(16)
+plotmatrix(t(:,[1,2,5,8]))
+
+%{
+figure(11)
+scatter(2*(1-sqrt(V(:,1)/1569)), newt(:,5))
+axis equal
+
+figure(12)
+scatter(2*(newt(:,5)-2).*(1-phi_mode), newt(:,6))
+axis equal
+
+figure(13)
+plotmatrix(newt(:, [2,3,5,6,8,9]))
+
+figure(14)
+scatter(2*V(:,1).*(1-phi_mode), V(:,2))
+axis equal
+%}

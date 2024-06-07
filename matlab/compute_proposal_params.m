@@ -125,6 +125,9 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 
 	Delta = (mode_sh.th2 - sh_prime.th2);
 	lm = V(2,2) / H(2,2);
+	d1 = sh_prime.d1;
+	d2 = sh_prime.d2;
+	epsilon = sh_prime.eps;
 	for step = 1:n_steps
 		delta = h * Delta; % -((H_int + Hp)\g);
 		th2_int = th2_int + delta;
@@ -184,15 +187,32 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 		H(2,2) = H(2,2) + H221 * delta(1) + H222 * delta(2);
 
 		% Update of V;
+		omega = exp(th2_int(1));
+		beta = -2*sqrt(V(1,1)/(0.5*(theta.N-1)));
+		d1 = d1;% * exp(0.2 * (delta(1) - 2*phi*delta(2)));
+		d2 = d2 * exp(beta * delta(1) + 0.0*delta(2));
+		epsilon = epsilon * exp(1.0 * delta(1));
+		vmax = epsilon + sqrt(0.5);
+		vmin = sqrt(1-vmax^2);
+		eigV = [vmax, vmin; vmin, -vmax];
+		Sigma = eigV * diag([d1, d2]) * eigV';
+		X01 = -0.5*omega*[(1+phi^2), -2*phi; 2*phi*(1-phi^2), -2*(1-phi^2)];
+		%V = X01 * Sigma * X01';
+
 		S = 1-sqrt(V(1,1)/((theta.N-1)/2));
-		V111 = 2*V(1,1)*S;
-		V112 = -V(1,1)*S;
+		S111 = -2*V(1,1)*sqrt(V(1,1)/((theta.N-1)/2));
+		%S112 = -3*V(1,2);
+		V111 = 2*V(1,1) + S111;
+		V112 = -L(1,1) - V(1,2); % 2*V(1,2) + S112;
 		V121 = V112;
-		V122 = Cov_1_22 + V(2,2);
+		S122 = 0; 6*V(1,2);
+		S222 = 0; %-20*V(1,2);
+		V122 = Cov_1_22 + V(2,2) + S122;
 		V(1,1) = V(1,1) + V111 * delta(1) + V112 * delta(2);
 		V(1,2) = V(1,2) + V121 * delta(1) + V122 * delta(2);
 		V(2,1) = V(1,2);
-		V221 = 2*Cov_1_22;
+		V221 = 2*Cov_1_22 + S122;
+		V222 = 2*Cov_2_22 + S222;
 		V(2,2) = lm * H(2,2);
 
 		% Update of L;
@@ -200,13 +220,13 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 		L(1,1) = min(L(1,1), L(1,2)^2/(0.95*L(2,2)));
 
 		if max(eig(L)) > -1
+			fprintf("L eigenvalue above -1 in compute_proposal_params\n")
 			display(H);
 			display(V);
 			display(L);
 			display(lm);
 			display(Delta);
 			display(step);
-			display(S);
 		end
 		%{
 		L111 = H_int(1,1) + 2*V(1,1)*S;
@@ -244,7 +264,8 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 	%fprintf("Mode based H_int: (%f, %f, %f)\n\n", H_int(1,1), H_int(1,2), H_int(2,2))
 
 	omqi_hat = omqiota;
-	H_hat = L;          % likelihood only
+	H_hat = L;          % likelihood only, no prior
+	V_hat = V;
 	th_hat = th2_int;   % posterior
 
 	gbar = Hbar * (sh_prime.th2 - mode_sh.th2);
@@ -256,17 +277,82 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 	d = th_hat - mode_sh.th2;
 	sh_prime.params.th_hat_distance = -0.5 * d' * mode_sh.post2.H * d;
 
-	sh_prime.params.Hhat = [H_hat(1,1), H_hat(1,2), H_hat(2,2)];
+	d = theta_prime.th(1:2) - mode_sh.th2;
+	sh_prime.params.mode_distance = -0.5 * d' * mode_sh.like2.H * d;
+
+	% Prediction of Vhat based on Eigendecomposition of Sigma
+	phi_prime = tanh(sh_prime.th2(2));
+	d1 = sh_prime.d1;% * exp(0.2 * (Delta(1) - 2*phi*Delta(2)));
+	b1 = -2*sqrt(sh_prime.like2.Var(1,1)/(0.5*(theta.N-1)));
+	b2 = 2*(1-phi_prime)*b1;
+	d2 = sh_prime.d2 * exp(b1 * Delta(1) + b2 * Delta(2));
+	ep = sh_prime.eps * exp(-0.0 * Delta(1));
+	eigV = [cos(0.25*pi-ep), sin(0.25*pi-ep); sin(0.25*pi-ep), -cos(0.25*pi-ep)];
+	Sigma = eigV * diag([d1, d2]) * eigV';
+
+	omega_hat = exp(mode_sh.th2(1));
+	phi_hat = tanh(mode_sh.th2(2));
+	c = 1/(theta.N-2);
+	X01 = 0.5*omega_hat*[(1+phi_hat^2+c), -2*phi_hat; 2*phi_hat*(1-phi_hat^2), -2*(1-phi_hat^2)];
+	Vhat = X01 * Sigma * X01';
+	%sh_prime.params.Vhat = [Vhat(1,1), Vhat(1,2), Vhat(2,2)];
+	sh_prime.params.Vhat = [V_hat(1,1), V_hat(1,2), V_hat(2,2)];
+
+	% Prediction of Vhat based on Psi30, Psi21, Psi12, Psi03
+	H11 = sh_prime.like2.Hess(1,1);
+	H12 = sh_prime.like2.Hess(1,2);
+	H22 = sh_prime.like2.Hess(2,2);
+	V11 = sh_prime.like2.Var(1,1);
+	V12 = sh_prime.like2.Var(1,2);
+	V22 = sh_prime.like2.Var(2,2);
+	phi = tanh(sh_prime.th2(2));
+	H111 = H11 + V11;
+	H112 = H12 + V12;
+	H121 = H112;
+	H122 = H22 + V22;
+	Cov_1_22 = 2*(1-phi^2) * V11 - 4*phi * V12;
+	Cov_2_22 = 2*(1-phi^2) * V12 - 4*phi * V22;
+	H221 = H22 + Cov_1_22;
+	mean_222 = -2*(3*phi^2+1) * H12 - 6*phi * H22;
+	H222 = mean_222 + Cov_2_22;
+	H11hat = H11 + H111 * Delta(1) + H112 * Delta(2);
+	H12hat = H12 + H121 * Delta(1) + H122 * Delta(2);
+	H22hat = H22 + H221 * Delta(1) + H222 * Delta(2);
+
+	S111 = -2*V11*sqrt(V11/((theta.N-1)/2));
+	S112 = -3*V12 - H11 - V11;
+	S122 = V22;
+	S222 = -20*V12;
+
+	V111 = 2*V11 + S111;
+	V112 = 2*V12 + S112;
+	V11hat = V11 + V111 * Delta(1) + V112 * Delta(2);
+
+	V121 = V112;
+	V122 = Cov_1_22 + V22 + S122;
+	V12hat = V12 + V121 * Delta(1) + V122 * Delta(2);
+
+	V221 = 2*Cov_1_22;% + S122;
+	V222 = 2*Cov_2_22;% + S222;
+	V22hat = V22 + V221 * Delta(1) + V222 * Delta(2); %lm * H22hat;
+
+	%sh_prime.params.Hhat = [H_hat(1,1), H_hat(1,2), H_hat(2,2)];
+	%sh_prime.params.Hhat = [H(1,1) + Vhat(1,1), H(1,2) + Vhat(1,2), H(2,2) + Vhat(2,2)];
+	sh_prime.params.Hhat = [H11hat, H12hat, H22hat];
+	sh_prime.params.Vhat = [V11hat, V12hat, V22hat];
+	sh_prime.params.Lhat = sh_prime.params.Hhat + sh_prime.params.Vhat;
+	sh_prime.params.Delta = Delta;
+
 	[V, D] = eig(H_hat);
 	sh_prime.params.Hhat_eigs = sort(diag(D))';
 	sh_prime.params.Hhat_Vmax = max(abs(V(:,1)));
 	sh_prime.params.Hhat_wHw1 = w1'*H_hat*w1;
 	sh_prime.params.Hhat_wHw2 = w2'*H_hat*w2;
 	sh_prime.params.Hhat_omqi = omqi_hat;
-	H0 = sh_prime.like2.H;
+	H0 = sh_prime.like2.Hess;
 	[V0, D0] = eig(H0);
 	sh_prime.params.H0 = [H0(1,1), H0(1,2), H0(2,2)];
-	sh_prime.params.V0 = [hmout.q_theta.Var(1,1), hmout.q_theta.Var(1,2), hmout.q_theta.Var(2,2)];
+	sh_prime.params.V0 = [sh_prime.like2.Var(1,1), sh_prime.like2.Var(1,2), sh_prime.like2.Var(2,2)];
 	sh_prime.params.H0_eigs = sort(diag(D0))';
 	sh_prime.params.H0_Vmax = max(abs(V0(:,1)));
 	sh_prime.params.H0_wHw1 = w1'*H0*w1;
