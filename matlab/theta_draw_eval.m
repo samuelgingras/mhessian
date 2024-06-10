@@ -59,7 +59,7 @@ function [lnq_thSt, varargout] = ...
 		lnq_thSt = L_plus - log(cosh(L_plus));
 	end
 	lnq_thSt = lnq_thSt + 0.5 * (log(det(prec_eps)) ...
-		- (nu-1) * log( (nu+uSt(1)^2) * (nu+uSt(2)^2) ));
+		- (nu+1) * log( (nu+uSt(1)^2) * (nu+uSt(2)^2) ));
 
 	% Conditional draw/eval of th3St given thSt
 	if has_mu
