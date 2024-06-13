@@ -41,8 +41,7 @@ function [lnq_thSt, varargout] = ...
 		delta_th2 = V*inv(prec_eps_root)*V' * uSt;
 		L_plus = directional_3rd(n, H, th2_con_mean, delta_th2);
 		L_plus = sign(L_plus) * min(abs(L_plus), 3);
-		%if (rand < (exp(-L_plus) - exp(L_plus)) / (exp(L_plus) + exp(-L_plus)))
-		if (rand < exp(L_plus) / (exp(L_plus) + exp(-L_plus)))
+		if (rand < -tanh(L_plus))
 			thSt2 = th2_con_mean + delta_th2;
 			lnq_thSt = L_plus - log(cosh(L_plus));
 		else

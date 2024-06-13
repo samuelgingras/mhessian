@@ -34,12 +34,12 @@ function sh = compute_shape(prior, hmout, theta)
 		
 		% New November 1-3 stuff to obtain L_opt_th, L_opt_th_th
 		% Quantities obtained without further approximation
+		mean_223 = -2*((1+phi)^2 * g3 + (1+2*phi) * H23);  % u_3 in notes
 
 		% Quantities requiring further approximations
-		mean_223 = -2*((1+phi)^2 * g3 + (1+2*phi) * H23);  % u_3 in notes
 		Cov_1_23 = -2*(1+phi) * V13;
 		Cov_2_23 = -2*(1+phi) * V23;
-		V33_outer = omega * (1-phi) * q_theta.xp(1);
+		V33_outer = ome ga * (1-phi) * q_theta.xp(1);
 		V33_inner = V33 - V33_outer;
 		V33_12 = -2*(1+phi) * V33_inner - (1+phi) * V33_outer;
 		V33_22 = 2*(1+phi)*(1+3*phi) * V33_inner + 2*(1+phi)*phi * V33_outer;

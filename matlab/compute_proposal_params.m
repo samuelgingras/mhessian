@@ -219,6 +219,7 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 		L = H + V;
 		L(1,1) = min(L(1,1), L(1,2)^2/(0.95*L(2,2)));
 
+		%{
 		if max(eig(L)) > -1
 			fprintf("L eigenvalue above -1 in compute_proposal_params\n")
 			display(H);
@@ -228,6 +229,8 @@ function sh_prime = compute_proposal_params(model, prior, y, mode_sh, theta, hmo
 			display(Delta);
 			display(step);
 		end
+		%}
+
 		%{
 		L111 = H_int(1,1) + 2*V(1,1)*S;
 		L112 = -H_int(1,1);
